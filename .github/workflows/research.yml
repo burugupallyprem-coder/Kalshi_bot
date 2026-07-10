@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: research
+  group: reports-commit
   cancel-in-progress: false
 
 jobs:
@@ -29,7 +29,6 @@ jobs:
       - name: Integrity check (guards against corrupted files)
         run: python -m compileall -q src tests
 
-
       - name: Run research sweep
         env:
           ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
@@ -43,4 +42,6 @@ jobs:
           git config user.name "stock-trader-bot"
           git config user.email "stock-trader-bot@users.noreply.github.com"
           git add reports/
-          git diff --cached --quiet || git commit -m "research repor
+          git diff --cached --quiet || git commit -m "reports $(date -u +%Y%m%dT%H%M%SZ)"
+          git pull --rebase origin main || true
+          git push

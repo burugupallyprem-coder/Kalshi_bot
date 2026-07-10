@@ -58,7 +58,7 @@ strategies:
     stop_lookback: 6
     max_risk_frac: 0.015
 
-gate:   # a strategy must clear ALL of these to be eligible for Phase 2 paper deployment
+gate:   # a strategy must clear ALL of these (on VALIDATION) for Phase 2 eligibility
   min_trades: 100
   min_expectancy_r: 0.05
   min_profit_factor: 1.15
@@ -85,3 +85,6 @@ research:   # Phase 1.5 disciplined sweep - grids PRE-DECLARED, gate applies to 
       time_stop_bars: [12, 24]
     momentum:
       rr: [2.0, 3.0]
+      stop_lookback: [6, 12]
+      hold_above: [3, 6]
+      time_stop_bars: [24, 36]
