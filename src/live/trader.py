@@ -17,6 +17,7 @@ Worst-case daily loss is structurally bounded ~= max_positions x risk_pct.
 
 import argparse
 import csv
+import json
 import time as time_mod
 from datetime import datetime, time as dtime
 from pathlib import Path
@@ -83,6 +84,17 @@ def size_shares(entry, stop, equity, cfg):
     return max(min(shares, math.floor(max_value / entry)), 0)
 
 
+def load_premarket_flags(cfg):
+    """Today's flags from data/premarket_flags.json, or None."""
+    try:
+        flags = json.loads((ROOT / "data" / "premarket_flags.json").read_text())
+        if flags.get("date") != now_et().strftime("%Y-%m-%d"):
+            return None
+        return flags
+    except Exception:
+        return None
+
+
 def run_entry_session(cfg, client=None, sleep_fn=time_mod.sleep):
     live = cfg["live"]
     params = live["params"]
@@ -96,6 +108,21 @@ def run_entry_session(cfg, client=None, sleep_fn=time_mod.sleep):
     if not clock.get("is_open"):
         print("market closed - nothing to do")
         return
+    pm_cfg = live.get("premarket") or {}
+    guard = pm_cfg.get("guard_mode", "log_only")
+    flags = load_premarket_flags(cfg) or {}
+    skip_syms = set()
+    if flags.get("halt_today"):
+        if guard == "enforce":
+            slackbot.post("[TRADE] Session HALTED by pre-market flag (large overnight gap). No entries today.")
+            return
+        print("[entry-session] premarket would-halt flag present (log_only - trading normally)")
+    if flags.get("skip_symbols"):
+        if guard == "enforce":
+            skip_syms = set(flags["skip_symbols"])
+            print(f"[entry-session] enforcing symbol skips: {sorted(skip_syms)}")
+        else:
+            print(f"[entry-session] premarket would-skip (log_only): {flags['skip_symbols']}")
     et_now = now_et()
     offset = et_now.strftime("%z")
     offset = offset[:3] + ":" + offset[3:]   # -0400 -> -04:00 (DST-safe)
@@ -113,7 +140,8 @@ def run_entry_session(cfg, client=None, sleep_fn=time_mod.sleep):
                 sleep_fn(poll_secs)
                 continue
             symbols = [s for s in cfg["universe"]
-                       if s not in attempted and s not in open_names]
+                       if s not in attempted and s not in open_names
+                       and s not in skip_syms]
             if symbols:
                 bars_by_sym = client.today_bars(symbols, start_iso,
                                                 feed=live.get("feed", "iex"))

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>STOCK-TRADER-BOT // MISSION CONTROL</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  :root { --bg:#070b12; --panel:#0d1420; --line:#1c2a3f; --cyan:#28e0ff; --green:#2bff88; --red:#ff3b5b; --amber:#ffb347; --txt:#c9d7e8; --mut:#5b7186; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--txt); font:14px/1.5 'Cascadia Code','Consolas',monospace; padding:24px; }
+  body::after { content:""; position:fixed; inset:0; pointer-events:none; background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(0,0,0,.12) 2px 4px); }
+  h1 { font-size:20px; letter-spacing:3px; color:var(--cyan); text-shadow:0 0 12px rgba(40,224,255,.5); }
+  .sub { color:var(--mut); margin:4px 0 20px; font-size:12px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px 18px; box-shadow:0 0 18px rgba(40,224,255,.05); }
+  .card h2 { font-size:12px; letter-spacing:2px; color:var(--cyan); margin-bottom:12px; }
+  .row { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px dashed var(--line); }
+  .row:last-child { border-bottom:none; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px; animation:pulse 2s infinite; }
+  .dot.green { background:var(--green); box-shadow:0 0 8px var(--green); }
+  .dot.red { background:var(--red); box-shadow:0 0 8px var(--red); }
+  .dot.gray { background:#444; animation:none; }
+  @keyframes pulse { 50% { opacity:.45; } }
+  .big { font-size:26px; color:#fff; text-shadow:0 0 10px rgba(43,255,136,.35); }
+  .mut { color:var(--mut); font-size:12px; }
+  .ok { color:var(--green); } .bad { color:var(--red); } .warn { color:var(--amber); }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  td { padding:4px 6px; border-bottom:1px solid var(--line); }
+  .chip { display:inline-block; border:1px solid var(--line); border-radius:12px; padding:2px 9px; margin:2px; font-size:12px; }
+  .chip.bad { border-color:var(--red); color:var(--red); }
+  .banner { border:1px solid var(--amber); color:var(--amber); border-radius:8px; padding:8px 12px; margin-bottom:18px; font-size:12px; letter-spacing:1px; }
+</style></head><body>
+<h1>STOCK-TRADER-BOT <span style="color:var(--mut)">//</span> MISSION CONTROL</h1>
+<div class="sub">generated 2026-07-10 11:04Z · refresh: run dashboard.ps1 (git pull + reopen)</div>
+<div class="banner">PAPER ACCOUNT ONLY · LIVE ENDPOINT CODE-LOCKED · champion: ORB (WEAK PASS - on trial) · premarket guard: log_only</div>
+<div class="grid">
+  <div class="card"><h2>PIPELINE STATUS</h2>
+    <div class="row"><span>premarket briefing</span><span><span class="dot gray"></span><span class="mut">no runs yet</span></span></div>
+    <div class="row"><span>entry session</span><span><span class="dot gray"></span><span class="mut">no runs yet</span></span></div>
+    <div class="row"><span>eod flatten</span><span><span class="dot gray"></span><span class="mut">no runs yet</span></span></div>
+    <div class="row"><span>research sweep</span><span><span class="dot gray"></span><span class="mut">no runs yet</span></span></div>
+  </div>
+  <div class="card"><h2>ACCOUNT (PAPER)</h2>
+    <div class="big">$100,000</div>
+    <div class="row"><span>last day P&amp;L</span><span>--</span></div>
+    <div class="row"><span>total since start</span><span>--</span></div>
+    <canvas id="eq" height="110"></canvas>
+  </div>
+  <div class="card"><h2>TODAY // PRE-MARKET</h2>
+    <div class="row"><span>risk flags</span><span class="warn">NONE - normal session</span></div>
+    <div style="margin-top:8px"><span class="mut">no pre-market data yet today</span></div>
+  </div>
+  <div class="card"><h2>CHAMPION CONFIG</h2>
+    <div class="row"><span>strategy</span><span>ORB long-only</span></div>
+    <div class="row"><span>opening range</span><span>3 x 5min</span></div>
+    <div class="row"><span>reward:risk</span><span>1.5</span></div>
+    <div class="row"><span>entry cutoff</span><span>10:30 ET</span></div>
+    <div class="row"><span>risk / trade</span><span>0.5% · max 3 positions</span></div>
+  </div>
+  <div class="card"><h2>LATEST RESEARCH VERDICTS</h2><table><tr><td>orb</td><td class="ok">PASS</td></tr><tr><td>vwap_revert</td><td class="bad">FAIL</td></tr><tr><td>momentum</td><td class="bad">FAIL</td></tr></table></div>
+  <div class="card"><h2>RECENT RUNS</h2><table><tr><td colspan="3" class="mut">awaiting first tracked run</td></tr></table></div>
+</div>
+<script>
+try {
+  const ctx = document.getElementById("eq");
+  new Chart(ctx, { type:"line",
+    data: { labels: [], datasets: [{ data: [], borderColor:"#28e0ff",
+      backgroundColor:"rgba(40,224,255,.08)", fill:true, tension:.3, pointRadius:2 }] },
+    options: { plugins: { legend: { display:false } },
+      scales: { x: { ticks: { color:"#5b7186" }, grid: { color:"#1c2a3f" } },
+                y: { ticks: { color:"#5b7186" }, grid: { color:"#1c2a3f" } } } } });
+} catch (e) { /* offline: chart lib unavailable, numbers above still valid */ }
+</script>
+</body></html>

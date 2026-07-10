@@ -96,3 +96,20 @@ class AlpacaClient:
                   "start": start_iso, "limit": 10000, "feed": feed, "sort": "asc"}
         data = self._req("GET", "/v2/stocks/bars", base=DATA_BASE, params=params)
         return (data or {}).get("bars") or {}
+
+    def latest_trades(self, symbols, feed="iex"):
+        params = {"symbols": ",".join(symbols), "feed": feed}
+        data = self._req("GET", "/v2/stocks/trades/latest", base=DATA_BASE, params=params)
+        return (data or {}).get("trades") or {}
+
+    def daily_bars(self, symbols, start, feed="iex"):
+        params = {"symbols": ",".join(symbols), "timeframe": "1Day", "start": start,
+                  "limit": 10000, "feed": feed, "sort": "asc"}
+        data = self._req("GET", "/v2/stocks/bars", base=DATA_BASE, params=params)
+        return (data or {}).get("bars") or {}
+
+    def news(self, symbols, start, limit=50):
+        params = {"symbols": ",".join(symbols), "start": start, "limit": limit,
+                  "sort": "desc", "exclude_contentless": "true"}
+        data = self._req("GET", "/v1beta1/news", base=DATA_BASE, params=params)
+        return (data or {}).get("news") or []

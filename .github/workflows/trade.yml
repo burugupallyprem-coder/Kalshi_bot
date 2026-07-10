@@ -49,6 +49,7 @@ jobs:
           echo "running mode: $MODE"
 
       - name: Run trader
+        id: mainrun
         env:
           ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
@@ -56,11 +57,19 @@ jobs:
           SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
         run: python -m src.live.trader --${{ steps.mode.outputs.mode }}
 
+      - name: Render dashboard
+        if: always()
+        env:
+          WORKFLOW_NAME: trade-${{ steps.mode.outputs.mode == 'eod-flatten' && 'eod' || 'entry' }}
+          RUN_OUTCOME: ${{ steps.mainrun.outcome }}
+        run: python -m src.live.dashboard
+
       - name: Commit daily log
+        if: always()
         run: |
           git config user.name "stock-trader-bot"
           git config user.email "stock-trader-bot@users.noreply.github.com"
-          git add data/ reports/
+          git add data/ reports/ dashboard.html
           git diff --cached --quiet || git commit -m "paper log $(date -u +%Y%m%dT%H%M%SZ)"
           git pull --rebase origin main || true
           git push

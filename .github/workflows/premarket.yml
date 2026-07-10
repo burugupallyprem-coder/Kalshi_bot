@@ -1,21 +1,27 @@
-name: research
+name: premarket
 
 on:
   workflow_dispatch:
+    inputs:
+      force:
+        description: "run outside the pre-open window (true/false)"
+        required: false
+        default: "false"
   schedule:
-    - cron: "0 13 * * 6"   # Saturdays 13:00 UTC - weekly research cycle
+    - cron: "5 13 * * 1-5"   # ~08:35 ET summer - inside pre-open window
+    - cron: "5 14 * * 1-5"   # ~08:35 ET winter - the other tick self-skips
 
 permissions:
   contents: write
 
 concurrency:
-  group: reports-commit
+  group: premarket
   cancel-in-progress: false
 
 jobs:
-  research:
+  premarket:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -29,28 +35,34 @@ jobs:
       - name: Integrity check (guards against corrupted files)
         run: python -m compileall -q src tests
 
-      - name: Run research sweep
+      - name: Run pre-market briefing
         id: mainrun
         env:
           ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
-        run: python -m src.backtest.research
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            python -m src.live.premarket --force
+          else
+            python -m src.live.premarket
+          fi
 
       - name: Render dashboard
         if: always()
         env:
-          WORKFLOW_NAME: research
+          WORKFLOW_NAME: premarket
           RUN_OUTCOME: ${{ steps.mainrun.outcome }}
         run: python -m src.live.dashboard
 
-      - name: Commit reports
+      - name: Commit flags
         if: always()
         run: |
           git config user.name "stock-trader-bot"
           git config user.email "stock-trader-bot@users.noreply.github.com"
-          git add reports/ data/ dashboard.html
-          git diff --cached --quiet || git commit -m "reports $(date -u +%Y%m%dT%H%M%SZ)"
+          git add data/ dashboard.html
+          git diff --cached --quiet || git commit -m "premarket flags $(date -u +%Y%m%dT%H%M%SZ)"
           git pull --rebase origin main || true
           git push

@@ -100,3 +100,9 @@ live:   # Phase 2 paper deployment - research winner of 2026-07-10 (WEAK PASS, o
     rr: 1.5
     vol_confirm: false
     max_risk_frac: 0.02
+  premarket:
+    enabled: true
+    guard_mode: log_only        # log_only | enforce - stays log_only until evidence supports enforcing
+    halt_spy_gap_pct: 1.5       # would-halt if SPY gaps more than this overnight
+    skip_symbol_gap_pct: 4.0    # would-skip symbols gapping more than this (earnings/news days)
+    llm_model: claude-haiku-4-5-20251001   # used only if ANTHROPIC_API_KEY secret is set
