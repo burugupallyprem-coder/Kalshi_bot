@@ -73,7 +73,7 @@ config.yaml            Phase 1 will add universe, strategy params, risk caps
 
 - **Phase 0 - DONE** (heartbeat verified 2026-07-10).
 - **Phase 1 (built)** - backtest harness: `python -m src.backtest.run`, or the `backtest` Actions workflow (manual + Saturdays 14:00 UTC). Downloads 2 years of 5-min bars, runs all three candidate strategies (opening-range breakout, VWAP mean-reversion, momentum continuation) through the no-lookahead simulator with pessimistic costs, writes `reports/backtest_*.md` + per-trade CSVs, posts a [BACKTEST] summary to Slack. GATE (config.yaml): >=100 trades, >=0.05R expectancy, profit factor >=1.15, >=60% quarters positive - only PASSing strategies are eligible for Phase 2 paper deployment.
-- Phase 2 - paper execution engine: bracket orders, risk caps (0.5%/trade, -1.5% daily kill-switch, flat by 15:50 ET).
+- **Phase 2 (built)** - paper execution of the research winner (ORB: open_bars=3, rr=1.5, cutoff 10:30 ET). `trade` workflow runs the entry session each morning and the EOD flatten at 15:45 ET (DST-safe double crons). Server-side bracket orders; 0.5% risk/trade; max 3 positions; worst-case day structurally ~ -1.5%; never holds overnight. [TRADE] and [EOD] alerts to Slack; daily log committed to data/paper_days.csv.
 - Phase 3 - THE MONTH: 21 sessions, zero human touches, pre-registered success criteria.
 - Phase 4 - verdict: translate measured edge into $/day per capital level, honestly.
 

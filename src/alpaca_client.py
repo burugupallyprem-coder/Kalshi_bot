@@ -15,6 +15,7 @@ import requests
 
 PAPER_BASE = "https://paper-api.alpaca.markets"
 LIVE_BASE = "https://api.alpaca.markets"
+DATA_BASE = "https://data.alpaca.markets"
 LIVE_UNLOCK_PHRASE = "yes-i-cleared-every-gate-in-the-roadmap"
 
 
@@ -38,10 +39,20 @@ class AlpacaClient:
             "APCA-API-SECRET-KEY": self.secret_key,
         })
 
-    def _get(self, path, params=None):
-        resp = self.session.get(self.base + path, params=params, timeout=self.timeout)
+    # -- low level --------------------------------------------------------
+
+    def _req(self, method, path, base=None, **kwargs):
+        url = (base or self.base) + path
+        resp = self.session.request(method, url, timeout=self.timeout, **kwargs)
         resp.raise_for_status()
-        return resp.json()
+        if resp.text:
+            return resp.json()
+        return None
+
+    def _get(self, path, params=None):
+        return self._req("GET", path, params=params)
+
+    # -- account / market state -------------------------------------------
 
     def account(self):
         return self._get("/v2/account")
@@ -51,3 +62,37 @@ class AlpacaClient:
 
     def positions(self):
         return self._get("/v2/positions")
+
+    def open_orders(self):
+        return self._get("/v2/orders", params={"status": "open", "limit": 500})
+
+    # -- trading (paper) ---------------------------------------------------
+
+    def place_bracket_order(self, symbol, qty, stop_price, target_price):
+        """Market entry + server-side stop loss and take profit (day order)."""
+        payload = {
+            "symbol": symbol,
+            "qty": str(int(qty)),
+            "side": "buy",
+            "type": "market",
+            "time_in_force": "day",
+            "order_class": "bracket",
+            "take_profit": {"limit_price": str(round(target_price, 2))},
+            "stop_loss": {"stop_price": str(round(stop_price, 2))},
+        }
+        return self._req("POST", "/v2/orders", json=payload)
+
+    def cancel_all_orders(self):
+        return self._req("DELETE", "/v2/orders")
+
+    def close_all_positions(self):
+        return self._req("DELETE", "/v2/positions", params={"cancel_orders": "true"})
+
+    # -- market data -------------------------------------------------------
+
+    def today_bars(self, symbols, start_iso, timeframe="5Min", feed="iex"):
+        """Completed intraday bars since start_iso (IEX feed = free real-time)."""
+        params = {"symbols": ",".join(symbols), "timeframe": timeframe,
+                  "start": start_iso, "limit": 10000, "feed": feed, "sort": "asc"}
+        data = self._req("GET", "/v2/stocks/bars", base=DATA_BASE, params=params)
+        return (data or {}).get("bars") or {}

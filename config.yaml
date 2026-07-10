@@ -88,3 +88,15 @@ research:   # Phase 1.5 disciplined sweep - grids PRE-DECLARED, gate applies to 
       stop_lookback: [6, 12]
       hold_above: [3, 6]
       time_stop_bars: [24, 36]
+
+live:   # Phase 2 paper deployment - research winner of 2026-07-10 (WEAK PASS, on trial)
+  strategy: orb
+  feed: iex            # free real-time feed for the intraday loop
+  poll_seconds: 120
+  max_positions: 3
+  params:
+    open_bars: 3
+    cutoff_et: "10:30"
+    rr: 1.5
+    vol_confirm: false
+    max_risk_frac: 0.02
