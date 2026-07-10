@@ -1,1 +1,10 @@
-{"runs": []}
+{
+ "runs": [
+  {
+   "wf": "premarket",
+   "utc": "2026-07-10 15:39",
+   "ok": true,
+   "outcome": "success"
+  }
+ ]
+}
