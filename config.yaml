@@ -70,6 +70,7 @@ research:   # Phase 1.5 disciplined sweep - grids PRE-DECLARED, gate applies to 
   val_start: "2026-01-01"
   val_end: null            # null = yesterday
   min_train_trades: 150
+  min_train_expectancy_r: 0.02   # winner below this on TRAIN -> labeled WEAK PASS
   slippage_sensitivity_cents: [0.5, 2.0]
   grids:
     orb:
@@ -84,6 +85,3 @@ research:   # Phase 1.5 disciplined sweep - grids PRE-DECLARED, gate applies to 
       time_stop_bars: [12, 24]
     momentum:
       rr: [2.0, 3.0]
-      stop_lookback: [6, 12]
-      hold_above: [3, 6]
-      time_stop_bars: [24, 36]

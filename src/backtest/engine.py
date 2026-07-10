@@ -9,6 +9,7 @@ Honesty rules baked in:
 - The entry bar itself can stop out (no free pass).
 - Gap through stop fills at the open (worse for us); gap through target
   fills at the open (better) - both realistic.
+- Optional time-stop: exit at bar close after N bars held with no resolution.
 - Slippage charged on both sides. Everything flat by the configured time.
 - If the data ends early (halt/half session), position closes at last bar.
 - Fixed equity per trade (no compounding) so expectancy stats stay clean.
@@ -110,8 +111,7 @@ def simulate_day(day, signals, cfg, strategy_name):
                 _close(trades, pos, row, max(float(row["open"]), pos["target"]) - slip,
                        "target", strategy_name)
                 pos = None
-            elif pos["time_stop"] is not None and pos["bars_held"] >= pos["time_stop"]:
-                # neither stop nor target after N bars - exit at this bar close
+            elif pos["time_stop"] is not None and pos["bars_held"] >= int(pos["time_stop"]):
                 _close(trades, pos, row, float(row["close"]) - slip, "time_stop", strategy_name)
                 pos = None
             else:

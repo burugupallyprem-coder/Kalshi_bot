@@ -47,5 +47,5 @@ def generate(day, params):
                 continue
             return [{"entry_bar": i + 1, "stop": stop, "target": target,
                      "time_stop_bars": params.get("time_stop_bars"),
-                     "reason": f"vwap_stretch_{z_entry}sig"}]
+                     "reason": "vwap_stretch"}]
     return []

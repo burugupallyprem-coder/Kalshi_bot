@@ -31,12 +31,12 @@ def generate(day, params):
         row = day.iloc[i]
         if float(row["close"]) > rng_high:
             if vol_confirm and rng_vol > 0 and float(row["volume"]) < 1.5 * rng_vol:
-                return []  # breakout without volume - not our trade
+                return []
             close = float(row["close"])
             risk = close - rng_low
             if risk <= 0 or risk / close > max_risk_frac:
                 return []
             return [{"entry_bar": i + 1, "stop": rng_low, "rr": rr,
                      "time_stop_bars": params.get("time_stop_bars"),
-                     "reason": f"orb_break_{rng_high:.2f}"}]
+                     "reason": "orb_breakout"}]
     return []
