@@ -71,8 +71,8 @@ config.yaml            Phase 1 will add universe, strategy params, risk caps
 
 ## Roadmap position (see day-trading-bot-roadmap.md)
 
-- **Phase 0 (this)** - done when the heartbeat lands in Slack.
-- Phase 1 - backtest harness: 2+ years of 5-min bars, three candidate strategies (opening-range breakout, VWAP mean-reversion, momentum continuation), pessimistic costs, walk-forward. GATE: nothing deploys without positive net expectancy.
+- **Phase 0 - DONE** (heartbeat verified 2026-07-10).
+- **Phase 1 (built)** - backtest harness: `python -m src.backtest.run`, or the `backtest` Actions workflow (manual + Saturdays 14:00 UTC). Downloads 2 years of 5-min bars, runs all three candidate strategies (opening-range breakout, VWAP mean-reversion, momentum continuation) through the no-lookahead simulator with pessimistic costs, writes `reports/backtest_*.md` + per-trade CSVs, posts a [BACKTEST] summary to Slack. GATE (config.yaml): >=100 trades, >=0.05R expectancy, profit factor >=1.15, >=60% quarters positive - only PASSing strategies are eligible for Phase 2 paper deployment.
 - Phase 2 - paper execution engine: bracket orders, risk caps (0.5%/trade, -1.5% daily kill-switch, flat by 15:50 ET).
 - Phase 3 - THE MONTH: 21 sessions, zero human touches, pre-registered success criteria.
 - Phase 4 - verdict: translate measured edge into $/day per capital level, honestly.

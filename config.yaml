@@ -1,4 +1,65 @@
-# Phase 0 config. Phase 1 adds: universe, strategy params, risk caps, session times.
+# All tunables live here. Change thresholds in config, not in code.
 
 alpaca:
   env: paper   # live is code-locked until every roadmap gate passes (see README)
+
+universe:   # liquid megacaps + index ETFs, long-only v1
+  - SPY
+  - QQQ
+  - AAPL
+  - MSFT
+  - NVDA
+  - AMZN
+  - META
+  - GOOGL
+  - TSLA
+  - AMD
+  - NFLX
+  - AVGO
+  - JPM
+  - BAC
+  - XOM
+  - CVX
+  - UNH
+  - V
+  - MA
+  - COST
+
+backtest:
+  start: "2024-07-01"
+  end: null            # null = yesterday
+  timeframe: 5Min
+  feed: sip            # free plan includes historical SIP; auto-falls back to iex
+
+costs:
+  slippage_cents: 1    # per share, per side (entries buy higher, exits sell lower)
+
+risk:
+  equity: 100000       # fixed per-trade sizing base (no compounding in backtest)
+  risk_pct: 0.5        # % of equity risked per trade via stop distance
+  max_position_pct: 20 # position value cap
+  flat_by_et: "15:50"  # everything closed by here, never hold overnight
+
+strategies:
+  orb:
+    open_bars: 3       # first 15 minutes
+    cutoff_et: "11:30"
+    rr: 2.0
+    max_risk_frac: 0.02
+  vwap_revert:
+    z_entry: 1.5
+    stop_sigmas: 1.0
+    sigma_window: 12
+    start_et: "10:00"
+    end_et: "15:00"
+  momentum:
+    confirm_bar: 12    # 10:30 ET on 5-min bars
+    rr: 2.0
+    stop_lookback: 6
+    max_risk_frac: 0.015
+
+gate:   # a strategy must clear ALL of these to be eligible for Phase 2 paper deployment
+  min_trades: 100
+  min_expectancy_r: 0.05
+  min_profit_factor: 1.15
+  min_quarters_positive_frac: 0.6
