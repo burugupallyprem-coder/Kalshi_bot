@@ -63,3 +63,27 @@ gate:   # a strategy must clear ALL of these to be eligible for Phase 2 paper de
   min_expectancy_r: 0.05
   min_profit_factor: 1.15
   min_quarters_positive_frac: 0.6
+
+research:   # Phase 1.5 disciplined sweep - grids PRE-DECLARED, gate applies to validation only
+  train_start: "2024-07-01"
+  train_end: "2025-12-31"
+  val_start: "2026-01-01"
+  val_end: null            # null = yesterday
+  min_train_trades: 150
+  slippage_sensitivity_cents: [0.5, 2.0]
+  grids:
+    orb:
+      open_bars: [3, 6]
+      rr: [1.5, 2.0, 3.0]
+      cutoff_et: ["10:30", "11:30"]
+      vol_confirm: [false, true]
+    vwap_revert:
+      z_entry: [1.5, 2.0, 2.5]
+      stop_sigmas: [1.0, 1.5]
+      chop_filter: [false, true]
+      time_stop_bars: [12, 24]
+    momentum:
+      rr: [2.0, 3.0]
+      stop_lookback: [6, 12]
+      hold_above: [3, 6]
+      time_stop_bars: [24, 36]

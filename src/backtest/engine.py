@@ -93,7 +93,9 @@ def simulate_day(day, signals, cfg, strategy_name):
                 if shares > 0:
                     pos = {"entry": entry_px, "stop": stop, "target": float(target),
                            "shares": shares, "entry_time": str(bar_time),
-                           "reason": sig.get("reason", strategy_name)}
+                           "reason": sig.get("reason", strategy_name),
+                           "bars_held": 0,
+                           "time_stop": sig.get("time_stop_bars")}
 
         # 2) exits on this bar (stop before target - conservative)
         if pos is not None:
@@ -108,6 +110,12 @@ def simulate_day(day, signals, cfg, strategy_name):
                 _close(trades, pos, row, max(float(row["open"]), pos["target"]) - slip,
                        "target", strategy_name)
                 pos = None
+            elif pos["time_stop"] is not None and pos["bars_held"] >= pos["time_stop"]:
+                # neither stop nor target after N bars - exit at this bar close
+                _close(trades, pos, row, float(row["close"]) - slip, "time_stop", strategy_name)
+                pos = None
+            else:
+                pos["bars_held"] += 1
 
     # 3) data ended with an open position (halt / half session) - close at last bar
     if pos is not None and n > 0:
