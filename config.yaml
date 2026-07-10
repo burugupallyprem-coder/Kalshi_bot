@@ -1,0 +1,4 @@
+# Phase 0 config. Phase 1 adds: universe, strategy params, risk caps, session times.
+
+alpaca:
+  env: paper   # live is code-locked until every roadmap gate passes (see README)
