@@ -1,17 +1,16 @@
-"""VWAP mean-reversion (long-only).
+"""VWAP mean-reversion - long or short (params["side"]).
 
-Buy when close stretches more than z_entry rolling-sigmas BELOW running VWAP.
-Target = VWAP at signal. Stop = entry - stop_sigmas x sigma.
-Optional `chop_filter`: only trade if price already crossed VWAP >= 2 times
-today (range-bound day - mean reversion's home turf; skips strong trend days).
-Optional `time_stop_bars`: bail out if reversion hasn't happened in N bars.
-One trade/symbol-day.
+LONG: close stretched z_entry sigmas BELOW vwap -> buy the snap-back, target
+vwap. SHORT: stretched ABOVE vwap -> short the fade, target vwap.
+Optional `chop_filter`: require >= 2 vwap crosses today (range-bound day).
+Optional `time_stop_bars`. One trade per symbol-day.
 """
 
 NAME = "vwap_revert"
 
 
 def generate(day, params):
+    side = params.get("side", "long")
     z_entry = float(params.get("z_entry", 1.5))
     stop_sigmas = float(params.get("stop_sigmas", 1.0))
     window = int(params.get("sigma_window", 12))
@@ -39,13 +38,20 @@ def generate(day, params):
             continue
         if chop_filter and int(crosses.iloc[i]) < 2:
             continue
-        if float(dev.iloc[i]) <= -z_entry * s:
+        stretched = (float(dev.iloc[i]) <= -z_entry * s) if side == "long" \
+            else (float(dev.iloc[i]) >= z_entry * s)
+        if stretched:
             entry_est = float(day.iloc[i]["close"])
-            stop = entry_est - stop_sigmas * s
             target = float(vwap.iloc[i])
-            if target <= entry_est or stop >= entry_est:
+            if side == "long":
+                stop = entry_est - stop_sigmas * s
+                ok = target > entry_est and stop < entry_est
+            else:
+                stop = entry_est + stop_sigmas * s
+                ok = target < entry_est and stop > entry_est
+            if not ok:
                 continue
-            return [{"entry_bar": i + 1, "stop": stop, "target": target,
+            return [{"entry_bar": i + 1, "stop": stop, "target": target, "side": side,
                      "time_stop_bars": params.get("time_stop_bars"),
-                     "reason": "vwap_stretch"}]
+                     "reason": f"vwap_{side}_fade"}]
     return []

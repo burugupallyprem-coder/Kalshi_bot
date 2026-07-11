@@ -1,15 +1,17 @@
-"""Opening-range breakout (long-only).
+"""Opening-range breakout - long or short (params["side"]).
 
-First `open_bars` 5-min bars define the range. If a later bar CLOSES above the
-range high before `cutoff_et`, go long at the next bar's open. Stop = range
-low. Target = entry + rr x risk. Optional `vol_confirm`: breakout bar volume
-must exceed 1.5x the average opening-range bar volume. One trade/symbol-day.
+First `open_bars` 5-min bars define the range. LONG: a close above the range
+high before cutoff -> buy next open, stop = range low. SHORT: a close below
+the range low -> sell short next open, stop = range high. Target = rr x risk.
+Optional `vol_confirm`: breakout bar volume > 1.5x avg range-bar volume.
+One trade per symbol-day.
 """
 
 NAME = "orb"
 
 
 def generate(day, params):
+    side = params.get("side", "long")
     open_bars = int(params.get("open_bars", 3))
     cutoff = params.get("cutoff_et", "11:30")
     rr = float(params.get("rr", 2.0))
@@ -29,14 +31,16 @@ def generate(day, params):
         if (t.hour, t.minute) >= (ch, cm):
             break
         row = day.iloc[i]
-        if float(row["close"]) > rng_high:
+        close = float(row["close"])
+        broke = close > rng_high if side == "long" else close < rng_low
+        if broke:
             if vol_confirm and rng_vol > 0 and float(row["volume"]) < 1.5 * rng_vol:
                 return []
-            close = float(row["close"])
-            risk = close - rng_low
+            stop = rng_low if side == "long" else rng_high
+            risk = abs(close - stop)
             if risk <= 0 or risk / close > max_risk_frac:
                 return []
-            return [{"entry_bar": i + 1, "stop": rng_low, "rr": rr,
+            return [{"entry_bar": i + 1, "stop": stop, "rr": rr, "side": side,
                      "time_stop_bars": params.get("time_stop_bars"),
-                     "reason": "orb_breakout"}]
+                     "reason": f"orb_{side}_break"}]
     return []

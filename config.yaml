@@ -74,16 +74,19 @@ research:   # Phase 1.5 disciplined sweep - grids PRE-DECLARED, gate applies to 
   slippage_sensitivity_cents: [0.5, 2.0]
   grids:
     orb:
+      side: [long, short]
       open_bars: [3, 6]
       rr: [1.5, 2.0, 3.0]
       cutoff_et: ["10:30", "11:30"]
       vol_confirm: [false, true]
     vwap_revert:
+      side: [long, short]
       z_entry: [1.5, 2.0, 2.5]
       stop_sigmas: [1.0, 1.5]
       chop_filter: [false, true]
       time_stop_bars: [12, 24]
     momentum:
+      side: [long, short]
       rr: [2.0, 3.0]
       stop_lookback: [6, 12]
       hold_above: [3, 6]

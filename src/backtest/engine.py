@@ -1,17 +1,20 @@
-"""Bar-driven day-trade simulator. Long-only v1.
+"""Bar-driven day-trade simulator. Long AND short (v2).
 
 Signal contract: strategies inspect bars up to index i and emit
-{"entry_bar": i + 1, ...} - the trade fills at the OPEN of that next bar.
-No lookahead is possible because signal logic never sees entry_bar's data.
+{"entry_bar": i + 1, "side": "long"|"short", ...} - fills at the OPEN of that
+next bar. No lookahead: signal logic never sees entry_bar's data.
+
+Direction is handled by a multiplier d (+1 long, -1 short). Slippage is always
+charged AGAINST us: longs buy higher / sell lower; shorts sell lower / cover
+higher. Shorts are simulated without borrow fees - fine for megacaps, noted in
+reports; treat marginal short edges with extra suspicion.
 
 Honesty rules baked in:
 - Stop is checked BEFORE target when both could hit in the same bar.
 - The entry bar itself can stop out (no free pass).
-- Gap through stop fills at the open (worse for us); gap through target
-  fills at the open (better) - both realistic.
-- Optional time-stop: exit at bar close after N bars held with no resolution.
-- Slippage charged on both sides. Everything flat by the configured time.
-- If the data ends early (halt/half session), position closes at last bar.
+- Gap through stop fills at the open (worse for us); gap through target fills
+  at the open (better) - both directions.
+- Optional time-stop; everything flat by the configured time; data-end close.
 - Fixed equity per trade (no compounding) so expectancy stats stay clean.
 """
 
@@ -36,12 +39,13 @@ class Trade:
     r_multiple: float
     exit_reason: str
     signal_reason: str
+    side: str = "long"
 
 
 def _size(entry, stop, cfg):
     equity = cfg["risk"]["equity"]
     risk_dollars = equity * cfg["risk"]["risk_pct"] / 100.0
-    per_share = entry - stop
+    per_share = abs(entry - stop)
     if per_share <= 0:
         return 0
     shares = math.floor(risk_dollars / per_share)
@@ -51,8 +55,9 @@ def _size(entry, stop, cfg):
 
 
 def _close(trades, pos, row, exit_px, reason, strategy_name):
-    risk_ps = pos["entry"] - pos["stop"]
-    pnl = (exit_px - pos["entry"]) * pos["shares"]
+    d = pos["d"]
+    risk_ps = abs(pos["entry"] - pos["stop"])
+    pnl = (exit_px - pos["entry"]) * pos["shares"] * d
     trades.append(Trade(
         symbol=str(row.get("symbol", "?")), strategy=strategy_name,
         date=str(row["et"].date()), entry_time=pos["entry_time"],
@@ -60,13 +65,14 @@ def _close(trades, pos, row, exit_px, reason, strategy_name):
         exit=round(exit_px, 4), shares=pos["shares"],
         stop=round(pos["stop"], 4), target=round(pos["target"], 4),
         pnl=round(pnl, 2),
-        r_multiple=round((exit_px - pos["entry"]) / risk_ps, 3) if risk_ps > 0 else 0.0,
+        r_multiple=round((exit_px - pos["entry"]) * d / risk_ps, 3) if risk_ps > 0 else 0.0,
         exit_reason=reason, signal_reason=pos["reason"],
+        side="long" if d == 1 else "short",
     ))
 
 
 def simulate_day(day, signals, cfg, strategy_name):
-    """day: DataFrame with symbol/open/high/low/close/et, reset_index. Long-only."""
+    """day: DataFrame with symbol/open/high/low/close/et, reset_index."""
     slip = cfg["costs"]["slippage_cents"] / 100.0
     hh, mm = [int(x) for x in cfg["risk"]["flat_by_et"].split(":")]
     flat_at = dtime(hh, mm)
@@ -84,35 +90,43 @@ def simulate_day(day, signals, cfg, strategy_name):
         # 1) entry fills at THIS bar's open (signal was generated on bar j-1)
         if pos is None and j in sig_by_bar and bar_time < flat_at:
             sig = sig_by_bar[j]
-            entry_px = float(row["open"]) + slip
+            d = -1 if sig.get("side") == "short" else 1
+            entry_px = float(row["open"]) + d * slip     # slip against us
             stop = float(sig["stop"])
-            if entry_px > stop:
+            if d * (entry_px - stop) > 0:                # stop must be on the loss side
                 target = sig.get("target")
                 if target is None:
-                    target = entry_px + float(sig["rr"]) * (entry_px - stop)
+                    target = entry_px + d * float(sig["rr"]) * abs(entry_px - stop)
                 shares = _size(entry_px, stop, cfg)
                 if shares > 0:
                     pos = {"entry": entry_px, "stop": stop, "target": float(target),
                            "shares": shares, "entry_time": str(bar_time),
-                           "reason": sig.get("reason", strategy_name),
+                           "reason": sig.get("reason", strategy_name), "d": d,
                            "bars_held": 0,
                            "time_stop": sig.get("time_stop_bars")}
 
         # 2) exits on this bar (stop before target - conservative)
         if pos is not None:
+            d = pos["d"]
+            stop_hit = (float(row["low"]) <= pos["stop"]) if d == 1 else (float(row["high"]) >= pos["stop"])
+            tgt_hit = (float(row["high"]) >= pos["target"]) if d == 1 else (float(row["low"]) <= pos["target"])
             if bar_time >= flat_at:
-                _close(trades, pos, row, float(row["open"]) - slip, "eod_flat", strategy_name)
+                px = float(row["open"])
+                _close(trades, pos, row, px - d * slip, "eod_flat", strategy_name)
                 pos = None
-            elif float(row["low"]) <= pos["stop"]:
-                _close(trades, pos, row, min(float(row["open"]), pos["stop"]) - slip,
-                       "stop", strategy_name)
+            elif stop_hit:
+                # gap through stop fills at the open (worse for us)
+                px = min(float(row["open"]), pos["stop"]) if d == 1 else max(float(row["open"]), pos["stop"])
+                _close(trades, pos, row, px - d * slip, "stop", strategy_name)
                 pos = None
-            elif float(row["high"]) >= pos["target"]:
-                _close(trades, pos, row, max(float(row["open"]), pos["target"]) - slip,
-                       "target", strategy_name)
+            elif tgt_hit:
+                # gap through target fills at the open (better for us)
+                px = max(float(row["open"]), pos["target"]) if d == 1 else min(float(row["open"]), pos["target"])
+                _close(trades, pos, row, px - d * slip, "target", strategy_name)
                 pos = None
             elif pos["time_stop"] is not None and pos["bars_held"] >= int(pos["time_stop"]):
-                _close(trades, pos, row, float(row["close"]) - slip, "time_stop", strategy_name)
+                px = float(row["close"])
+                _close(trades, pos, row, px - d * slip, "time_stop", strategy_name)
                 pos = None
             else:
                 pos["bars_held"] += 1
@@ -120,6 +134,7 @@ def simulate_day(day, signals, cfg, strategy_name):
     # 3) data ended with an open position (halt / half session) - close at last bar
     if pos is not None and n > 0:
         row = day.iloc[n - 1]
-        _close(trades, pos, row, float(row["close"]) - slip, "data_end", strategy_name)
+        px = float(row["close"])
+        _close(trades, pos, row, px - pos["d"] * slip, "data_end", strategy_name)
 
     return trades
