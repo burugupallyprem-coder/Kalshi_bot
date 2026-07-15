@@ -82,6 +82,7 @@ def test_eod_flatten_closed_market_skips():
 
 
 def test_eod_flatten_flattens(monkey_posts=[]):
+    (trader_mod.ROOT / "data" / "paper_days.csv").unlink(missing_ok=True)
     trader_mod.slackbot.post = lambda text, **kw: monkey_posts.append(text)
     real_now = trader_mod.now_et
     trader_mod.now_et = lambda: real_now().replace(hour=15, minute=46)
@@ -93,6 +94,24 @@ def test_eod_flatten_flattens(monkey_posts=[]):
         assert "+100.00" in monkey_posts[-1]
     finally:
         trader_mod.now_et = real_now
+
+
+def test_eod_dedupe_skips_second_tick():
+    import csv
+    from src.live import trader as tm
+    log = tm.ROOT / "data" / "paper_days.csv"
+    log.parent.mkdir(exist_ok=True)
+    today = tm.now_et().strftime("%Y-%m-%d")
+    with open(log, "w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(["date", "equity", "day_pnl", "positions_flattened", "orders_cancelled"])
+        w.writerow([today, "100000.00", "0.00", "0", "0"])
+    try:
+        c = MockClient(is_open=True)
+        run_eod_flatten({"live": {}}, client=c)
+        assert not c.cancelled and not c.closed  # second tick must not double-flatten
+    finally:
+        log.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

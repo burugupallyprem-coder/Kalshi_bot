@@ -96,6 +96,7 @@ live:   # Phase 2 paper deployment - research winner of 2026-07-10 (WEAK PASS, o
   strategy: orb
   feed: iex            # free real-time feed for the intraday loop
   poll_seconds: 120
+  session_start_et: "09:35"
   max_positions: 3
   params:
     open_bars: 3

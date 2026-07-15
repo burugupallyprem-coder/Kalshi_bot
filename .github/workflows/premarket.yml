@@ -8,8 +8,8 @@ on:
         required: false
         default: "false"
   schedule:
-    - cron: "5 13 * * 1-5"   # ~08:35 ET summer - inside pre-open window
-    - cron: "5 14 * * 1-5"   # ~08:35 ET winter - the other tick self-skips
+    - cron: "23 11 * * 1-5"   # fires early - code waits into the briefing window (scheduler-proof)
+    - cron: "23 12 * * 1-5"   # backup tick - dedupes if already briefed
 
 permissions:
   contents: write

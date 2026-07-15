@@ -134,11 +134,28 @@ def run(force=False):
     client = AlpacaClient()  # paper-locked
     clock = client.clock()
     mto = minutes_to_open(clock)
-    if not force:
-        if mto is None or mto < 0 or mto > 100 or mto < 10:
-            print(f"[premarket] not the pre-open window (minutes to open: {mto}) - skip")
-            return
     today = datetime.now(ET).strftime("%Y-%m-%d")
+    flags_path = ROOT / "data" / "premarket_flags.json"
+    if not force:
+        try:  # dedupe: the other DST cron tick may have briefed already
+            if json.loads(flags_path.read_text()).get("date") == today:
+                print("[premarket] already briefed today - skip")
+                return
+        except Exception:
+            pass
+        if mto is None or mto < 0:
+            print(f"[premarket] market already open - too late for a pre-market brief, skip")
+            return
+        if mto > 240:
+            print(f"[premarket] open is {mto:.0f}m away - not a trading morning, skip")
+            return
+        if mto > 100:  # arrived early (scheduler-proof) - wait until ~60m before open
+            wait_s = int((mto - 60) * 60)
+            print(f"[premarket] arrived early - waiting {wait_s // 60}m for the briefing window")
+            import time as _t
+            _t.sleep(wait_s)
+        elif mto < 10:
+            print(f"[premarket] only {mto:.0f}m to open - proceeding anyway with quick brief")
     universe = cfg["universe"]
     gaps = compute_gaps(client, universe)
     start_iso = (datetime.now(timezone.utc) - timedelta(hours=16)).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -149,9 +166,8 @@ def run(force=False):
         headlines = []
     flags = compute_flags(gaps, universe, pm_cfg, today)
 
-    out = ROOT / "data" / "premarket_flags.json"
-    out.parent.mkdir(exist_ok=True)
-    out.write_text(json.dumps(flags, indent=2), encoding="utf-8")
+    flags_path.parent.mkdir(exist_ok=True)
+    flags_path.write_text(json.dumps(flags, indent=2), encoding="utf-8")
 
     briefing = (llm_briefing(gaps, headlines, flags, pm_cfg.get("llm_model", "claude-haiku-4-5-20251001"))
                 or rule_based_briefing(gaps, headlines, flags))

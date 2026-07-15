@@ -8,10 +8,10 @@ on:
         required: false
         default: "entry-session"
   schedule:
-    - cron: "35 13 * * 1-5"   # 09:35 ET in summer (EDT) - entry session
-    - cron: "35 14 * * 1-5"   # 09:35 ET in winter (EST) - entry session
-    - cron: "45 19 * * 1-5"   # 15:45 ET in summer - EOD flatten + recap
-    - cron: "45 20 * * 1-5"   # 15:45 ET in winter - EOD flatten + recap
+    - cron: "17 13 * * 1-5"   # fires ~09:17 ET summer - code waits for 09:35 (scheduler-proof)
+    - cron: "17 14 * * 1-5"   # backup tick / winter early tick - waits or no-ops
+    - cron: "17 19 * * 1-5"   # fires ~15:17 ET summer - code waits for 15:45 flatten
+    - cron: "17 20 * * 1-5"   # backup tick / winter - waits or dedupes
 
 permissions:
   contents: write

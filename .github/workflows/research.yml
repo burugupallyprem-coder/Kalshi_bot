@@ -3,7 +3,7 @@ name: research
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 13 * * 6"   # Saturdays 13:00 UTC - weekly research cycle
+    - cron: "23 13 * * 6"   # Saturdays 13:00 UTC - weekly research cycle
 
 permissions:
   contents: write

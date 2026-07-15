@@ -85,7 +85,7 @@ def run():
     train_floor = rs.get("min_train_expectancy_r", 0.02)
     report = [f"# Research report - {ts}", "",
               f"Universe {len(symbols)} - train {rs['train_start']} -> {rs['train_end']} - "
-              f"validation {rs['val_start']} -> {val_end} - long-only - "
+              f"validation {rs['val_start']} -> {val_end} - long+short grids - "
               f"slippage {cfg['costs']['slippage_cents']}c/side - grids pre-declared", ""]
     slack_blocks = []
     all_rows = []
@@ -177,7 +177,7 @@ def run():
 
     header = (f"*[RESEARCH]* {ts}\n"
               f"Sweep: {len(symbols)} symbols | train {rs['train_start']} -> {rs['train_end']} | "
-              f"validation {rs['val_start']} -> {val_end} | long-only | "
+              f"validation {rs['val_start']} -> {val_end} | long+short grids | "
               f"{sum(len(expand_grid(rs['grids'][s])) for s in STRATEGIES)} configs")
     footer = (f"{verdict_line}\n"
               "_How to read: R = avg profit per $1 risked (gate >= +0.05R) | "

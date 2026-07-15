@@ -19,7 +19,7 @@ import argparse
 import csv
 import json
 import time as time_mod
-from datetime import datetime, time as dtime
+from datetime import datetime, time as dtime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -39,6 +39,27 @@ def load_config():
 
 def now_et():
     return datetime.now(ET)
+
+
+MAX_WAIT_MIN = 130   # jobs arrive early (GitHub cron jitter) and wait for their moment
+
+
+def _minutes_to_open(clock):
+    try:
+        nxt = datetime.fromisoformat(clock["next_open"].replace("Z", "+00:00"))
+        return (nxt - datetime.now(timezone.utc)).total_seconds() / 60.0
+    except Exception:
+        return None
+
+
+def _sleep_until_et(target, sleep_fn, label):
+    """Sleep in 30s steps until wall-clock ET reaches target (capped)."""
+    waited = 0
+    while now_et().time() < target and waited < MAX_WAIT_MIN * 60:
+        sleep_fn(30)
+        waited += 30
+    if waited:
+        print(f"[{label}] waited {waited // 60}m - proceeding at {now_et().time()} ET")
 
 
 def _parse_hhmm(s):
@@ -105,8 +126,17 @@ def run_entry_session(cfg, client=None, sleep_fn=time_mod.sleep):
     client = client or AlpacaClient()  # paper-locked
 
     clock = client.clock()
+    session_start = _parse_hhmm(live.get("session_start_et", "09:35"))
     if not clock.get("is_open"):
-        print("market closed - nothing to do")
+        mto = _minutes_to_open(clock)
+        if mto is None or mto > MAX_WAIT_MIN:
+            print(f"market closed, next open {mto} min away - not a trading morning")
+            return
+        print(f"[entry-session] arrived early ({mto:.0f}m before open) - waiting")
+    if now_et().time() < session_start:
+        _sleep_until_et(session_start, sleep_fn, "entry-session")
+    if now_et().time() >= cutoff:
+        print("[entry-session] past cutoff - nothing to do")
         return
     pm_cfg = live.get("premarket") or {}
     guard = pm_cfg.get("guard_mode", "log_only")
@@ -173,15 +203,21 @@ def run_entry_session(cfg, client=None, sleep_fn=time_mod.sleep):
     print(f"[entry-session] done - placed {len(placed)}: {placed}")
 
 
-def run_eod_flatten(cfg, client=None):
+def run_eod_flatten(cfg, client=None, sleep_fn=time_mod.sleep):
     client = client or AlpacaClient()  # paper-locked
     clock = client.clock()
     if not clock.get("is_open"):
         print("[eod] market closed - skip (day orders already expired)")
         return
-    if now_et().time() < dtime(15, 40):
-        print("[eod] too early - this cron tick is for the other DST season")
+    # dedupe: the other DST cron tick may have flattened already
+    log_path = ROOT / "data" / "paper_days.csv"
+    today = now_et().strftime("%Y-%m-%d")
+    if log_path.exists() and any(line.startswith(today) for line in log_path.read_text().splitlines()):
+        print("[eod] already flattened today - skip")
         return
+    if now_et().time() < dtime(15, 45):
+        print("[eod] arrived early - waiting for 15:45 ET (scheduler-proof)")
+        _sleep_until_et(dtime(15, 45), sleep_fn, "eod")
     positions = client.positions()
     open_orders = client.open_orders()
     client.cancel_all_orders()
