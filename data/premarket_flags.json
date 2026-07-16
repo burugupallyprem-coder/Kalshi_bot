@@ -1,1 +1,27 @@
-{"date": "2026-07-10", "halt_today": false, "skip_symbols": ["TSLA"]}
+{
+  "date": "2026-07-16",
+  "halt_today": false,
+  "skip_symbols": [],
+  "gaps": {
+    "SPY": -0.39,
+    "QQQ": -1.0,
+    "AAPL": 0.34,
+    "MSFT": 0.1,
+    "NVDA": -1.79,
+    "AMZN": 0.0,
+    "META": -0.06,
+    "GOOGL": 0.0,
+    "TSLA": 0.0,
+    "AMD": 0.06,
+    "NFLX": 0.0,
+    "AVGO": 0.01,
+    "JPM": 0.0,
+    "BAC": 0.0,
+    "XOM": 0.0,
+    "CVX": 0.0,
+    "UNH": 0.0,
+    "V": 0.0,
+    "MA": 0.0,
+    "COST": 0.0
+  }
+}
