@@ -146,7 +146,7 @@ def run(force=False):
         if mto is None or mto < 0:
             print(f"[premarket] market already open - too late for a pre-market brief, skip")
             return
-        if mto > 240:
+        if mto > 300:
             print(f"[premarket] open is {mto:.0f}m away - not a trading morning, skip")
             return
         if mto > 100:  # arrived early (scheduler-proof) - wait until ~60m before open

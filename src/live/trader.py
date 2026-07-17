@@ -41,7 +41,7 @@ def now_et():
     return datetime.now(ET)
 
 
-MAX_WAIT_MIN = 130   # jobs arrive early (GitHub cron jitter) and wait for their moment
+MAX_WAIT_MIN = 250   # jobs arrive HOURS early (GitHub cron is unreliable) and wait; public repo = free minutes
 
 
 def _minutes_to_open(clock):

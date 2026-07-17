@@ -8,8 +8,11 @@ on:
         required: false
         default: "false"
   schedule:
-    - cron: "23 11 * * 1-5"   # fires early - code waits into the briefing window (scheduler-proof)
-    - cron: "23 12 * * 1-5"   # backup tick - dedupes if already briefed
+    # staggered early ticks - code waits until ~60min before open; dedupe stops doubles
+    - cron: "53 9 * * 1-5"
+    - cron: "53 10 * * 1-5"
+    - cron: "53 11 * * 1-5"
+    - cron: "23 12 * * 1-5"
 
 permissions:
   contents: write
@@ -21,7 +24,7 @@ concurrency:
 jobs:
   premarket:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
 
