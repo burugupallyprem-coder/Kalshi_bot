@@ -103,18 +103,25 @@ research:   # Phase 1.5 disciplined sweep - grids PRE-DECLARED, gate applies to 
       hold_above: [3, 6]
       time_stop_bars: [24, 36]
 
-live:   # Phase 2 paper deployment - ORB LOGGING BENCHMARK (gate=FAIL; measured live, NOT a validated edge)
+live:   # Phase 2 paper deployment - PROMOTED filtered ORB.
+  # PASS on 2026-07-18: train +0.105R/PF1.334 AND validation +0.082R/PF1.289 agree,
+  # survives 2c slippage, walk-forward 3/4 folds. This is a CANDIDATE on a fresh
+  # 21-session paper trial (see PRE_REGISTRATION.md) - a backtest edge being tested
+  # live, NOT proven money and NOT eligible for real capital.
   strategy: orb
   feed: iex            # free real-time feed for the intraday loop
   poll_seconds: 120
   session_start_et: "09:35"
-  max_positions: 3
+  max_positions: 5     # matches rs_topk=5 breadth the backtest tested (worst-case day ~ -2.5%)
   params:
     open_bars: 3
     cutoff_et: "10:30"
     rr: 1.5
     vol_confirm: false
     max_risk_frac: 0.02
+    min_or_width_frac: 0.004   # volatility floor - skip dead-tape openings
+    regime_filter: true        # only go long when SPY is itself breaking up
+    rs_topk: 5                 # only trade the 5 strongest names vs SPY each morning
   premarket:
     enabled: true
     guard_mode: log_only        # log_only | enforce - stays log_only until evidence supports enforcing

@@ -1,10 +1,13 @@
-"""Phase 2: live PAPER execution of the ORB LOGGING BENCHMARK (long-only).
+"""Phase 2: live PAPER execution of the filtered ORB CANDIDATE (long-only).
 
-NOTE: ORB is NOT a validated edge. It FAILS the research gate (full-history
-PF < 1.0; only one 6-month validation slice was positive). It runs in paper
-purely to MEASURE a no-edge baseline live - never as a profit expectation and
-never a candidate for real capital. Do not add capital-scaling or live-money
-logic to this config.
+The deployed config (config.yaml `live`) is the filtered ORB that PASSED the
+hardened gate on 2026-07-18: opening-range breakout + volatility floor
+(min_or_width_frac) + market-regime gate (SPY must be breaking up) + relative-
+strength selection (rs_topk strongest names vs SPY). Train and validation agree
+and it clears the walk-forward. It is still a BACKTEST edge on a 21-session paper
+trial (see PRE_REGISTRATION.md) - being MEASURED live, NOT proven money, and NOT
+eligible for real capital. Do not add capital-scaling or live-money logic.
+The earlier UNFILTERED ORB was retired as a no-edge benchmark.
 
 Two modes, both idempotent and safe to re-run:
   --entry-session   poll from ~09:35 ET until cutoff; place bracket orders on
@@ -33,6 +36,7 @@ import yaml
 
 from src import slackbot
 from src.alpaca_client import AlpacaClient
+from src.strategies import filters
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 ET = ZoneInfo("America/New_York")
@@ -80,6 +84,7 @@ def compute_orb_signal(bars, params):
     open_bars = int(params.get("open_bars", 3))
     max_risk_frac = float(params.get("max_risk_frac", 0.02))
     vol_confirm = bool(params.get("vol_confirm", False))
+    min_or_width_frac = params.get("min_or_width_frac")
     if len(bars) < open_bars + 1:
         return None
     rng = bars[:open_bars]
@@ -88,6 +93,8 @@ def compute_orb_signal(bars, params):
     rng_vol = sum(float(b["v"]) for b in rng) / open_bars
     if rng_high <= rng_low:
         return None
+    if min_or_width_frac and rng_low > 0 and (rng_high - rng_low) / rng_low < float(min_or_width_frac):
+        return None   # volatility floor: skip dead-tape openings
     last = bars[-1]
     close = float(last["c"])
     if close <= rng_high:
@@ -138,6 +145,25 @@ def load_arming(cfg):
     return bool(a.get("armed")), a.get("reason", "no reason recorded")
 
 
+def _bars_early_return(bars, open_bars):
+    """(last-of-opening-range close / first open) - 1, from Alpaca bar dicts."""
+    if len(bars) < open_bars:
+        return 0.0
+    first_open = float(bars[0]["o"])
+    last_close = float(bars[open_bars - 1]["c"])
+    return (last_close / first_open - 1.0) if first_open > 0 else 0.0
+
+
+def _bars_spy_long_ok(spy_bars, open_bars):
+    """Market regime gate: True if SPY closed above its opening-range high on any
+    completed bar so far. Session loop only runs before cutoff, so 'so far' is
+    already time-bounded - no end-of-day lookahead."""
+    if not spy_bars or len(spy_bars) < open_bars + 1:
+        return False
+    hi = max(float(b["h"]) for b in spy_bars[:open_bars])
+    return any(float(b["c"]) > hi for b in spy_bars[open_bars:])
+
+
 def run_entry_session(cfg, client=None, sleep_fn=time_mod.sleep):
     live = cfg["live"]
     params = live["params"]
@@ -186,7 +212,12 @@ def run_entry_session(cfg, client=None, sleep_fn=time_mod.sleep):
     start_iso = f"{et_now.strftime('%Y-%m-%d')}T09:30:00{offset}"
     attempted = set()
     placed = []
-    print(f"[entry-session] {strategy} on {len(cfg['universe'])} symbols until {cutoff} ET")
+    open_bars = int(params.get("open_bars", 3))
+    regime_filter = bool(params.get("regime_filter", False))
+    rs_topk = params.get("rs_topk")
+    print(f"[entry-session] {strategy} on {len(cfg['universe'])} symbols until {cutoff} ET "
+          f"| regime_filter={regime_filter} rs_topk={rs_topk} "
+          f"min_or_width_frac={params.get('min_or_width_frac')}")
 
     while now_et().time() < cutoff:
         try:
@@ -196,12 +227,31 @@ def run_entry_session(cfg, client=None, sleep_fn=time_mod.sleep):
             if len(open_names) >= max_positions:
                 sleep_fn(poll_secs)
                 continue
+            # Fetch the FULL universe each poll: SPY is needed for the regime gate
+            # and every name is needed to rank relative strength. Same filters the
+            # research winner used - now applied to live bars.
+            bars_by_sym = client.today_bars(cfg["universe"], start_iso,
+                                            feed=live.get("feed", "iex"))
+            spy_bars = bars_by_sym.get("SPY") or []
+
+            # market-regime gate (long only): only trade when SPY itself breaks up
+            if regime_filter and not _bars_spy_long_ok(spy_bars, open_bars):
+                print("[entry-session] regime: SPY not breaking up - standing down this poll")
+                sleep_fn(poll_secs)
+                continue
+
+            # relative-strength selection: restrict to the strongest names vs SPY
+            allowed = set(cfg["universe"])
+            if rs_topk:
+                spy_er = _bars_early_return(spy_bars, open_bars)
+                scores = {sym: _bars_early_return(b, open_bars) - spy_er
+                          for sym, b in bars_by_sym.items() if len(b) >= open_bars}
+                allowed = filters.top_k_symbols(scores, rs_topk)
+
             symbols = [s for s in cfg["universe"]
-                       if s not in attempted and s not in open_names
-                       and s not in skip_syms]
+                       if s in allowed and s not in attempted
+                       and s not in open_names and s not in skip_syms]
             if symbols:
-                bars_by_sym = client.today_bars(symbols, start_iso,
-                                                feed=live.get("feed", "iex"))
                 for sym in symbols:
                     if len(open_names) + len(placed) >= max_positions:
                         break
