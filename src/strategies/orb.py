@@ -7,16 +7,20 @@ Optional `vol_confirm`: breakout bar volume > 1.5x avg range-bar volume.
 One trade per symbol-day.
 """
 
+from src.strategies import filters
+
 NAME = "orb"
 
 
-def generate(day, params):
+def generate(day, params, ctx=None):
     side = params.get("side", "long")
     open_bars = int(params.get("open_bars", 3))
     cutoff = params.get("cutoff_et", "11:30")
     rr = float(params.get("rr", 2.0))
     max_risk_frac = float(params.get("max_risk_frac", 0.02))
     vol_confirm = bool(params.get("vol_confirm", False))
+    min_or_width_frac = params.get("min_or_width_frac")   # vol floor (opt-in)
+    regime_filter = bool(params.get("regime_filter", False))  # SPY must be breaking up
     if len(day) < open_bars + 2:
         return []
     rng = day.iloc[:open_bars]
@@ -24,6 +28,13 @@ def generate(day, params):
     rng_low = float(rng["low"].min())
     rng_vol = float(rng["volume"].mean())
     if rng_high <= rng_low:
+        return []
+    # opt-in volatility floor: skip dead-tape days (narrow opening range)
+    if min_or_width_frac and not filters.passes_vol_floor(day, open_bars, min_or_width_frac):
+        return []
+    # opt-in market-regime gate (long only): require SPY itself breaking up.
+    # ctx is provided by the research harness; None in plain backtests -> not applied.
+    if regime_filter and side == "long" and ctx is not None and not ctx.get("spy_long_ok", False):
         return []
     ch, cm = [int(x) for x in cutoff.split(":")]
     for i in range(open_bars, len(day) - 1):

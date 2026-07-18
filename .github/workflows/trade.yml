@@ -13,10 +13,16 @@ on:
     - cron: "37 11 * * 1-5"
     - cron: "37 12 * * 1-5"
     - cron: "19 13 * * 1-5"
-    # EOD ticks - staggered; code waits until 15:45 ET, dedupe stops doubles
+    # EOD ticks - DENSE and staggered so at least one survives GitHub's dropped
+    # crons and lands in the 15:30-15:50 ET flatten window; code waits until
+    # 15:45 ET, dedupe stops doubles. Late/post-close ticks now record + warn
+    # (see run_eod_flatten) instead of silently skipping.
     - cron: "37 17 * * 1-5"
     - cron: "37 18 * * 1-5"
+    - cron: "7 19 * * 1-5"
+    - cron: "22 19 * * 1-5"
     - cron: "37 19 * * 1-5"
+    - cron: "50 19 * * 1-5"
     - cron: "17 20 * * 1-5"
 
 permissions:
@@ -75,7 +81,13 @@ jobs:
         run: |
           git config user.name "stock-trader-bot"
           git config user.email "stock-trader-bot@users.noreply.github.com"
-          git add data/ reports/ dashboard.html
-          git diff --cached --quiet || git commit -m "paper log $(date -u +%Y%m%dT%H%M%SZ)"
-          git pull --rebase origin main || true
-          git push
+          for i in 1 2 3; do
+            git fetch origin main
+            git reset --soft origin/main
+            git add data/ reports/ dashboard.html
+            if git diff --cached --quiet; then echo "nothing to commit"; break; fi
+            git commit -m "paper log $(date -u +%Y%m%dT%H%M%SZ)"
+            if git push origin HEAD:main; then break; fi
+            echo "push race - retry $i"
+            sleep $((RANDOM % 10 + 5))
+          done

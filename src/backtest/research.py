@@ -13,6 +13,7 @@ Run: python -m src.backtest.research
 """
 
 import itertools
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -22,7 +23,7 @@ import yaml
 from src import data as data_mod
 from src import slackbot
 from src.backtest import engine, metrics
-from src.strategies import momentum, orb, vwap_revert
+from src.strategies import filters, momentum, orb, vwap_revert
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 STRATEGIES = {"orb": orb, "vwap_revert": vwap_revert, "momentum": momentum}
@@ -49,10 +50,72 @@ def day_groups(bars):
     return groups
 
 
-def run_config(groups, strat_mod, params, cfg, name):
+def build_context(groups, cfg):
+    """Per-date market context for opt-in filters: SPY regime + relative-strength
+    scores. Computed once per group set (train / val) and reused across combos."""
+    rs_cfg = cfg.get("research", {})
+    ob = int(rs_cfg.get("regime_open_bars", 3))
+    cutoff = rs_cfg.get("regime_cutoff_et", "10:30")
+    spy_days, early = {}, {}
+    for symbol, day in groups:
+        date = day["date"].iloc[0]
+        early.setdefault(date, {})[symbol] = filters.early_return(day, ob)
+        if symbol == "SPY":
+            spy_days[date] = day
+    spy_long, spy_er = {}, {}
+    for date, sday in spy_days.items():
+        spy_long[date] = filters.spy_long_ok(sday, ob, cutoff)
+        spy_er[date] = filters.early_return(sday, ob)
+    rs = {date: {s: er - spy_er.get(date, 0.0) for s, er in syms.items()}
+          for date, syms in early.items()}
+    return {"spy_long_ok": spy_long, "rs": rs}
+
+
+def walk_forward_folds(dates, n_folds):
+    """Split a sorted unique date list into n sequential (roughly equal) folds.
+    Returns list of (start_date, end_date) inclusive."""
+    uniq = sorted(set(dates))
+    if not uniq or n_folds < 1:
+        return []
+    size = max(1, len(uniq) // n_folds)
+    folds = []
+    for i in range(n_folds):
+        lo = i * size
+        hi = (i + 1) * size if i < n_folds - 1 else len(uniq)
+        if lo >= len(uniq):
+            break
+        folds.append((uniq[lo], uniq[hi - 1]))
+    return folds
+
+
+def evaluate_walk_forward(groups, strat_mod, params, cfg, name, n_folds, context=None):
+    """Run the chosen params across sequential folds of the validation window.
+    Returns (positive_fold_count, total_folds, per_fold_expectancy_r)."""
+    dates = [day["date"].iloc[0] for _, day in groups]
+    folds = walk_forward_folds(dates, n_folds)
+    per_fold = []
+    for lo, hi in folds:
+        fold_groups = [(sym, day) for sym, day in groups
+                       if lo <= day["date"].iloc[0] <= hi]
+        m = metrics.summarize(run_config(fold_groups, strat_mod, params, cfg, name, context))
+        per_fold.append(m.get("expectancy_r", 0.0) if m.get("trades", 0) else 0.0)
+    positive = sum(1 for r in per_fold if r > 0)
+    return positive, len(per_fold), per_fold
+
+
+def run_config(groups, strat_mod, params, cfg, name, context=None):
     trades = []
-    for _, day in groups:
-        signals = strat_mod.generate(day, params)
+    rs_topk = params.get("rs_topk")
+    for symbol, day in groups:
+        ctx = None
+        if context is not None:
+            date = day["date"].iloc[0]
+            if rs_topk:
+                allowed = filters.top_k_symbols(context["rs"].get(date, {}), rs_topk)
+                if symbol not in allowed:
+                    continue
+            ctx = {"spy_long_ok": context["spy_long_ok"].get(date, False)}
+        signals = strat_mod.generate(day, params, ctx)
         if signals:
             trades.extend(engine.simulate_day(day, signals, cfg, name))
     return trades
@@ -81,6 +144,12 @@ def run():
     val_groups = day_groups(bars[bars["date"] >= val_start])
     print(f"train symbol-days: {len(train_groups):,}  val symbol-days: {len(val_groups):,}", flush=True)
 
+    train_ctx = build_context(train_groups, cfg)
+    val_ctx = build_context(val_groups, cfg)
+    wf = rs.get("walkforward", {}) or {}
+    wf_folds = int(wf.get("folds", 4))
+    wf_min_frac = float(wf.get("min_positive_frac", 0.6))
+
     gate = cfg["gate"]
     train_floor = rs.get("min_train_expectancy_r", 0.02)
     report = [f"# Research report - {ts}", "",
@@ -97,7 +166,7 @@ def run():
         results = []
         for idx, combo in enumerate(combos, 1):
             params = {**base, **combo}
-            trades = run_config(train_groups, strat_mod, params, cfg, strat_name)
+            trades = run_config(train_groups, strat_mod, params, cfg, strat_name, train_ctx)
             m = metrics.summarize(trades)
             print(f"  [{strat_name} {idx}/{len(combos)}] {_combo_str(combo)} -> "
                   f"{m.get('trades', 0)} trades, {m.get('expectancy_r', 0)}R", flush=True)
@@ -121,13 +190,22 @@ def run():
                           f"{m['expectancy_r']}R, PF {m['profit_factor']}")
         best_params, best_train, best_combo = eligible[0]
 
-        val_trades = run_config(val_groups, strat_mod, best_params, cfg, strat_name)
+        val_trades = run_config(val_groups, strat_mod, best_params, cfg, strat_name, val_ctx)
         vm = metrics.summarize(val_trades)
         if vm.get("trades", 0) == 0:
             report += ["", "Validation: 0 trades -> FAIL", ""]
             slack_blocks.append(f"*{strat_name.upper()}* -> FAIL (validation produced 0 trades)")
             continue
         verdict, why = metrics.gate_verdict(vm, gate)
+        wf_pos, wf_total, wf_per = evaluate_walk_forward(
+            val_groups, strat_mod, best_params, cfg, strat_name, wf_folds, val_ctx)
+        wf_frac = wf_pos / wf_total if wf_total else 0.0
+        wf_ok = wf_total > 0 and wf_frac >= wf_min_frac
+        # a real PASS must clear BOTH the single-window gate AND walk-forward folds
+        if verdict == "PASS" and not wf_ok:
+            verdict = "FAIL"
+            extra = f"walk-forward only {wf_pos}/{wf_total} folds positive (< {wf_min_frac:.0%})"
+            why = extra if why == "all gate checks met" else f"{why}; {extra}"
         weak = verdict == "PASS" and best_train["expectancy_r"] < train_floor
         overfit = (best_train["expectancy_r"] >= gate["min_expectancy_r"]
                    and vm["expectancy_r"] < 0)
@@ -138,7 +216,7 @@ def run():
         sens = []
         for sc in rs.get("slippage_sensitivity_cents", []):
             cfg_s = {**cfg, "costs": {**cfg["costs"], "slippage_cents": sc}}
-            sm = metrics.summarize(run_config(val_groups, strat_mod, best_params, cfg_s, strat_name))
+            sm = metrics.summarize(run_config(val_groups, strat_mod, best_params, cfg_s, strat_name, val_ctx))
             sens.append(f"{sc}c -> {sm.get('expectancy_r', 0)}R")
 
         report += ["", f"**Winner on validation: {label}**"
@@ -149,6 +227,8 @@ def run():
                    f"(${vm['expectancy_usd']}/trade), PF {vm['profit_factor']}, "
                    f"{vm['quarters_positive']}/{vm['quarters_total']} quarters+, maxDD ${vm['max_drawdown']:,}",
                    f"- slippage sensitivity: {' | '.join(sens)}",
+                   f"- walk-forward: {wf_pos}/{wf_total} folds positive "
+                   f"(per-fold R: {', '.join(f'{r:+.3f}' for r in wf_per)})",
                    f"- gate: {why}", ""]
 
         lines = [f"*{strat_name.upper()}* -> *{label}*" + (" (overfit signature!)" if overfit else "")]
@@ -161,12 +241,28 @@ def run():
                      + ("  <- near-zero selection edge: validation result is UNCONFIRMED" if weak else ""))
         if sens:
             lines.append(f"    costs: {' | '.join(sens)}")
+        lines.append(f"    walk-forward: {wf_pos}/{wf_total} folds positive "
+                     f"(need >= {wf_min_frac:.0%})")
         slack_blocks.append("\n".join(lines))
 
     verdict_line = ("Verdict: a config cleared the gate on validation - candidate for Phase 2 paper deployment (owner's call)."
                     if any_pass else
                     "Verdict: nothing clears the gate on validation. We keep iterating or accept the honest NO EDGE.")
     report += ["", verdict_line, ""]
+
+    # Kill-switch input: research decides whether live trading is ARMED. The
+    # trader only obeys this when config arming.mode == "auto" (see trader.py).
+    arming = {
+        "armed": bool(any_pass),
+        "verdict": "PASS" if any_pass else "NO-EDGE",
+        "reason": ("a config cleared the single-window gate AND walk-forward"
+                   if any_pass else
+                   "no config cleared gate + walk-forward - do not arm"),
+        "updated_utc": ts,
+        "note": "Consumed by trader entry session only when config arming.mode == 'auto'.",
+    }
+    (ROOT / "data").mkdir(exist_ok=True)
+    (ROOT / "data" / "arming.json").write_text(json.dumps(arming, indent=2), encoding="utf-8")
 
     out_dir = ROOT / "reports"
     out_dir.mkdir(exist_ok=True)

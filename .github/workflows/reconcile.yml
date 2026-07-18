@@ -1,7 +1,9 @@
-name: backtest
+name: reconcile-ledger
 
 on:
-  workflow_dispatch:   # manual single-config runs; the weekly cycle is research.yml
+  workflow_dispatch:
+  schedule:
+    - cron: "10 22 * * 1-5"   # 18:10 ET (EDT) - well after close; rebuild the day's ledger from Alpaca truth
 
 permissions:
   contents: write
@@ -11,41 +13,40 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  backtest:
+  reconcile:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-
       - run: pip install -r requirements.txt
-
-      - name: Integrity check (guards against corrupted files)
+      - name: Integrity check
         run: python -m compileall -q src tests
-
-      - name: Run backtest
+      - name: Rebuild ledger from Alpaca portfolio history
         env:
           ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
-        run: python -m src.backtest.run
-
-      - name: Commit reports
+        run: python -m src.live.reconcile
+      - name: Render dashboard
+        if: always()
+        env:
+          WORKFLOW_NAME: reconcile
+          RUN_OUTCOME: success
+        run: python -m src.live.dashboard
+      - name: Commit ledger
+        if: always()
         run: |
           git config user.name "stock-trader-bot"
           git config user.email "stock-trader-bot@users.noreply.github.com"
           for i in 1 2 3; do
             git fetch origin main
             git reset --soft origin/main
-            git add reports/ data/ dashboard.html
+            git add data/ dashboard.html
             if git diff --cached --quiet; then echo "nothing to commit"; break; fi
-            git commit -m "reports $(date -u +%Y%m%dT%H%M%SZ)"
+            git commit -m "ledger reconcile $(date -u +%Y%m%dT%H%M%SZ)"
             if git push origin HEAD:main; then break; fi
-            echo "push race - retry $i"
-            sleep $((RANDOM % 10 + 5))
+            echo "push race - retry $i"; sleep $((RANDOM % 10 + 5))
           done

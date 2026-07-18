@@ -50,7 +50,13 @@ jobs:
         run: |
           git config user.name "stock-trader-bot"
           git config user.email "stock-trader-bot@users.noreply.github.com"
-          git add reports/ data/ dashboard.html
-          git diff --cached --quiet || git commit -m "reports $(date -u +%Y%m%dT%H%M%SZ)"
-          git pull --rebase origin main || true
-          git push
+          for i in 1 2 3; do
+            git fetch origin main
+            git reset --soft origin/main
+            git add reports/ data/ dashboard.html
+            if git diff --cached --quiet; then echo "nothing to commit"; break; fi
+            git commit -m "reports $(date -u +%Y%m%dT%H%M%SZ)"
+            if git push origin HEAD:main; then break; fi
+            echo "push race - retry $i"
+            sleep $((RANDOM % 10 + 5))
+          done

@@ -10,7 +10,7 @@ Target = rr x risk. Optional `time_stop_bars`. One trade per symbol-day.
 NAME = "momentum"
 
 
-def generate(day, params):
+def generate(day, params, ctx=None):  # ctx unused (accepted for a uniform research interface)
     side = params.get("side", "long")
     confirm_bar = int(params.get("confirm_bar", 12))
     rr = float(params.get("rr", 2.0))

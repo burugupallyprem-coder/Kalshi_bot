@@ -1,4 +1,10 @@
-"""Phase 2: live PAPER execution of the research winner (ORB, long-only).
+"""Phase 2: live PAPER execution of the ORB LOGGING BENCHMARK (long-only).
+
+NOTE: ORB is NOT a validated edge. It FAILS the research gate (full-history
+PF < 1.0; only one 6-month validation slice was positive). It runs in paper
+purely to MEASURE a no-edge baseline live - never as a profit expectation and
+never a candidate for real capital. Do not add capital-scaling or live-money
+logic to this config.
 
 Two modes, both idempotent and safe to re-run:
   --entry-session   poll from ~09:35 ET until cutoff; place bracket orders on
@@ -116,6 +122,22 @@ def load_premarket_flags(cfg):
         return None
 
 
+def load_arming(cfg):
+    """Kill-switch. Returns (armed, reason).
+    manual -> always armed (preserves the pre-registered THE MONTH measurement).
+    auto   -> obey data/arming.json written by the research verdict; missing file
+              is treated as NOT armed (fail-safe: never trade an unproven config)."""
+    arm = cfg.get("arming", {}) or {}
+    mode = arm.get("mode", "manual")
+    if mode != "auto":
+        return True, f"arming.mode={mode} (trading regardless of verdict)"
+    try:
+        a = json.loads((ROOT / "data" / "arming.json").read_text())
+    except Exception:
+        return False, "arming.mode=auto but data/arming.json missing - refusing to trade (fail-safe)"
+    return bool(a.get("armed")), a.get("reason", "no reason recorded")
+
+
 def run_entry_session(cfg, client=None, sleep_fn=time_mod.sleep):
     live = cfg["live"]
     params = live["params"]
@@ -137,6 +159,11 @@ def run_entry_session(cfg, client=None, sleep_fn=time_mod.sleep):
         _sleep_until_et(session_start, sleep_fn, "entry-session")
     if now_et().time() >= cutoff:
         print("[entry-session] past cutoff - nothing to do")
+        return
+    armed, arm_reason = load_arming(cfg)
+    if not armed:
+        slackbot.post(f"[TRADE] Entry session DISARMED - no entries today. Reason: {arm_reason}")
+        print(f"[entry-session] disarmed: {arm_reason}")
         return
     pm_cfg = live.get("premarket") or {}
     guard = pm_cfg.get("guard_mode", "log_only")
@@ -203,46 +230,87 @@ def run_entry_session(cfg, client=None, sleep_fn=time_mod.sleep):
     print(f"[entry-session] done - placed {len(placed)}: {placed}")
 
 
-def run_eod_flatten(cfg, client=None, sleep_fn=time_mod.sleep):
-    client = client or AlpacaClient()  # paper-locked
-    clock = client.clock()
-    if not clock.get("is_open"):
-        print("[eod] market closed - skip (day orders already expired)")
-        return
-    # dedupe: the other DST cron tick may have flattened already
-    log_path = ROOT / "data" / "paper_days.csv"
-    today = now_et().strftime("%Y-%m-%d")
-    if log_path.exists() and any(line.startswith(today) for line in log_path.read_text().splitlines()):
-        print("[eod] already flattened today - skip")
-        return
-    if now_et().time() < dtime(15, 45):
-        print("[eod] arrived early - waiting for 15:45 ET (scheduler-proof)")
-        _sleep_until_et(dtime(15, 45), sleep_fn, "eod")
-    positions = client.positions()
-    open_orders = client.open_orders()
-    client.cancel_all_orders()
-    if positions:
-        client.close_all_positions()
-    account = client.account()
-    equity = float(account["equity"])
-    last_equity = float(account.get("last_equity") or equity)
-    day_pnl = equity - last_equity
-    # append recap row
+def _append_paper_day(equity, day_pnl, n_flat, n_cancelled, carried=0):
+    """Append one row to data/paper_days.csv. carried = positions that could
+    NOT be flattened (market already closed) - logged for honesty, never hidden."""
     out = ROOT / "data" / "paper_days.csv"
     out.parent.mkdir(exist_ok=True)
     new = not out.exists()
     with open(out, "a", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
         if new:
-            w.writerow(["date", "equity", "day_pnl", "positions_flattened", "orders_cancelled"])
+            w.writerow(["date", "equity", "day_pnl", "positions_flattened",
+                        "orders_cancelled", "positions_carried"])
         w.writerow([now_et().strftime("%Y-%m-%d"), f"{equity:.2f}", f"{day_pnl:.2f}",
-                    len(positions), len(open_orders)])
+                    n_flat, n_cancelled, carried])
+
+
+def run_eod_flatten(cfg, client=None, sleep_fn=time_mod.sleep):
+    client = client or AlpacaClient()  # paper-locked
+
+    # dedupe FIRST: a redundant cron tick must never double-flatten or double-log.
+    log_path = ROOT / "data" / "paper_days.csv"
+    today = now_et().strftime("%Y-%m-%d")
+    if log_path.exists() and any(line.startswith(today) for line in log_path.read_text().splitlines()):
+        print("[eod] already flattened/logged today - skip")
+        return
+
+    clock = client.clock()
+    is_open = bool(clock.get("is_open"))
+
+    # On-time path: market open. Wait until 15:45 ET, then cancel + flatten.
+    if is_open:
+        if now_et().time() < dtime(15, 45):
+            print("[eod] arrived early - waiting for 15:45 ET (scheduler-proof)")
+            _sleep_until_et(dtime(15, 45), sleep_fn, "eod")
+        positions = client.positions()
+        open_orders = client.open_orders()
+        client.cancel_all_orders()
+        if positions:
+            client.close_all_positions()
+        account = client.account()
+        equity = float(account["equity"])
+        last_equity = float(account.get("last_equity") or equity)
+        day_pnl = equity - last_equity
+        _append_paper_day(equity, day_pnl, len(positions), len(open_orders), carried=0)
+        slackbot.post(
+            f"[EOD] {today} paper recap\n"
+            f"Equity ${equity:,.2f} | day P&L ${day_pnl:+,.2f}\n"
+            f"Flattened {len(positions)} position(s), cancelled {len(open_orders)} order(s). "
+            f"Everything is cash overnight - by design.")
+        print(f"[eod] equity {equity:.2f} day_pnl {day_pnl:+.2f}")
+        return
+
+    # Late/missed path: market already closed when this tick ran. We cannot
+    # market-close now. Never silently skip: cancel stale orders, LOG the day so
+    # the ledger cannot freeze, and LOUDLY surface any position that carried
+    # without protection (bracket stop/target are DAY orders - expired at close).
+    positions = client.positions()
+    open_orders = client.open_orders()
+    if not positions and not open_orders:
+        # Flat and closed - the on-time tick owns clean flat days and reconcile.py
+        # is the authoritative backfill. Don't write speculative holiday rows.
+        print("[eod] market closed, account already flat - nothing to flatten; "
+              "on-time tick / reconcile.py own the ledger row")
+        return
+    try:
+        client.cancel_all_orders()
+    except Exception as e:
+        print(f"[eod] cancel_all_orders failed on closed market: {e}")
+    account = client.account()
+    equity = float(account["equity"])
+    last_equity = float(account.get("last_equity") or equity)
+    day_pnl = equity - last_equity
+    carried = len(positions)
+    _append_paper_day(equity, day_pnl, 0, len(open_orders), carried=carried)
     slackbot.post(
-        f"[EOD] {now_et().strftime('%Y-%m-%d')} paper recap\n"
+        f"[EOD][WARNING] {today} - EOD ran AFTER market close ({now_et().strftime('%H:%M')} ET).\n"
         f"Equity ${equity:,.2f} | day P&L ${day_pnl:+,.2f}\n"
-        f"Flattened {len(positions)} position(s), cancelled {len(open_orders)} order(s). "
-        f"Everything is cash overnight - by design.")
-    print(f"[eod] equity {equity:.2f} day_pnl {day_pnl:+.2f}")
+        f"{carried} position(s) COULD NOT be flattened and have carried overnight "
+        f"WITHOUT protective stops (bracket legs are day orders - they expired at close). "
+        f"Cancelled {len(open_orders)} stale order(s). "
+        f"This violates the flat-by-close rule - investigate cron timing.")
+    print(f"[eod][WARN] post-close: equity {equity:.2f} day_pnl {day_pnl:+.2f} carried {carried}")
 
 
 def main():

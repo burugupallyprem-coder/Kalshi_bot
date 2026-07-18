@@ -9,7 +9,7 @@ Optional `time_stop_bars`. One trade per symbol-day.
 NAME = "vwap_revert"
 
 
-def generate(day, params):
+def generate(day, params, ctx=None):  # ctx unused (accepted for a uniform research interface)
     side = params.get("side", "long")
     z_entry = float(params.get("z_entry", 1.5))
     stop_sigmas = float(params.get("stop_sigmas", 1.0))

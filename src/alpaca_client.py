@@ -60,6 +60,13 @@ class AlpacaClient:
     def clock(self):
         return self._get("/v2/clock")
 
+    def portfolio_history(self, period="3M", timeframe="1D"):
+        """Daily equity + realized P&L series straight from the paper account.
+        Authoritative source for reconstructing data/paper_days.csv."""
+        return self._get("/v2/account/portfolio/history",
+                         params={"period": period, "timeframe": timeframe,
+                                 "extended_hours": "false"}) or {}
+
     def positions(self):
         return self._get("/v2/positions")
 

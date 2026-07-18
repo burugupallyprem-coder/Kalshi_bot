@@ -162,7 +162,7 @@ def render():
 </style></head><body>
 <h1>STOCK-TRADER-BOT <span style="color:var(--mut)">//</span> MISSION CONTROL</h1>
 <div class="sub">generated {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")}Z · refresh: run dashboard.ps1 (git pull + reopen)</div>
-<div class="banner">PAPER ACCOUNT ONLY · LIVE ENDPOINT CODE-LOCKED · champion: ORB (WEAK PASS - on trial) · premarket guard: {guard}</div>
+<div class="banner">PAPER ACCOUNT ONLY · LIVE ENDPOINT CODE-LOCKED · logging benchmark: ORB (gate = FAIL - measured live, NOT a validated edge) · premarket guard: {guard}</div>
 <div class="grid">
   <div class="card"><h2>PIPELINE STATUS</h2>
     <div class="row"><span>premarket briefing</span><span>{light("premarket")}</span></div>
@@ -180,7 +180,7 @@ def render():
     <div class="row"><span>risk flags</span><span class="warn">{html.escape(flag_line)}</span></div>
     <div style="margin-top:8px">{mover_html}</div>
   </div>
-  <div class="card"><h2>CHAMPION CONFIG</h2>
+  <div class="card"><h2>LOGGING BENCHMARK (ORB)</h2>
     <div class="row"><span>strategy</span><span>ORB long-only</span></div>
     <div class="row"><span>opening range</span><span>{params.get("open_bars", 3)} x 5min</span></div>
     <div class="row"><span>reward:risk</span><span>{params.get("rr", 1.5)}</span></div>

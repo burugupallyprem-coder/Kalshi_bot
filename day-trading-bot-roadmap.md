@@ -7,7 +7,7 @@ Platform: Alpaca paper · Money: paper only · Infra: GitHub Actions + Slack · 
 
 ## 1. The honest math (read this first)
 
-- Your target of $50–150/day = $1,050–$3,150/month (21 sessions) = $12.6k–37.8k/year.
+- Your $50-150/day target = 0.05-0.15%/day on $100k. It is the YARDSTICK BEING TESTED, not a promise. Honest translation today: measured edge is ~zero, so measured $/day is ~zero. $/day = per-trade edge (R, after realistic fills) x risk per trade x trades/day - and paper $100k P&L massively OVERSTATES what a small live account would earn. No capital talk until a config clears the gate AND walk-forward.
 - **Dollars = edge × capital.** Required daily return to make $100/day:
 
 | Capital | Required/day | Annualized | Reality check |
@@ -60,7 +60,7 @@ Success criteria pre-registered before day 1 — no moving goalposts:
 - Statistical: ≥60 trades, positive net expectancy after modeled costs, profit factor ≥ 1.15, max DD ≤ 6%
 
 **Phase 4 — Verdict & translation**
-Convert measured expectancy into $/day at each capital level; compare honestly against your $50–150/day target; decide: extend to 3 months / iterate / kill.
+Convert measured expectancy into $/day = edge(R after fills) x risk/trade x trades/day, at each capital level; state it honestly (near-zero today); compare against the $50-150/day yardstick; decide: extend / iterate / kill. Never scale capital on an unvalidated edge.
 
 ## 5. Gates before live money is even discussed
 
