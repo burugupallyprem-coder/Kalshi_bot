@@ -325,8 +325,14 @@
    "outcome": "success"
   },
   {
+   "wf": "premarket",
+   "utc": "2026-07-21 12:30",
+   "ok": true,
+   "outcome": "success"
+  },
+  {
    "wf": "trade-entry",
-   "utc": "2026-07-21 14:31",
+   "utc": "2026-07-21 14:32",
    "ok": true,
    "outcome": "success"
   }
