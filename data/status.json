@@ -323,6 +323,12 @@
    "utc": "2026-07-20 23:10",
    "ok": true,
    "outcome": "success"
+  },
+  {
+   "wf": "premarket",
+   "utc": "2026-07-21 12:30",
+   "ok": true,
+   "outcome": "success"
   }
  ]
 }
