@@ -212,6 +212,10 @@ def run_entry_session(cfg, client=None, sleep_fn=time_mod.sleep):
     start_iso = f"{et_now.strftime('%Y-%m-%d')}T09:30:00{offset}"
     attempted = set()
     placed = []
+    polls = 0
+    regime_ok_ever = False
+    last_shortlist = []
+    signals_seen = 0
     open_bars = int(params.get("open_bars", 3))
     regime_filter = bool(params.get("regime_filter", False))
     rs_topk = params.get("rs_topk")
@@ -221,6 +225,7 @@ def run_entry_session(cfg, client=None, sleep_fn=time_mod.sleep):
 
     while now_et().time() < cutoff:
         try:
+            polls += 1
             equity = float(client.account()["equity"])
             open_names = {p["symbol"] for p in client.positions()}
             open_names |= {o["symbol"] for o in client.open_orders()}
@@ -239,6 +244,7 @@ def run_entry_session(cfg, client=None, sleep_fn=time_mod.sleep):
                 print("[entry-session] regime: SPY not breaking up - standing down this poll")
                 sleep_fn(poll_secs)
                 continue
+            regime_ok_ever = True
 
             # relative-strength selection: restrict to the strongest names vs SPY
             allowed = set(cfg["universe"])
@@ -251,6 +257,7 @@ def run_entry_session(cfg, client=None, sleep_fn=time_mod.sleep):
             symbols = [s for s in cfg["universe"]
                        if s in allowed and s not in attempted
                        and s not in open_names and s not in skip_syms]
+            last_shortlist = sorted(allowed)
             if symbols:
                 for sym in symbols:
                     if len(open_names) + len(placed) >= max_positions:
@@ -258,6 +265,7 @@ def run_entry_session(cfg, client=None, sleep_fn=time_mod.sleep):
                     sig = compute_orb_signal(bars_by_sym.get(sym) or [], params)
                     if not sig:
                         continue
+                    signals_seen += 1
                     attempted.add(sym)
                     entry_est = sig["entry_est"]
                     stop = sig["stop"]
@@ -278,6 +286,26 @@ def run_entry_session(cfg, client=None, sleep_fn=time_mod.sleep):
         sleep_fn(poll_secs)
 
     print(f"[entry-session] done - placed {len(placed)}: {placed}")
+
+    # ALWAYS report, even (especially) when nothing traded. Silence must never be
+    # ambiguous: the operator must be able to tell "stood down correctly" from
+    # "never ran at all".
+    today_str = now_et().strftime("%Y-%m-%d")
+    if placed:
+        body = f"Placed {len(placed)} order(s): {', '.join(placed)}."
+    elif regime_filter and not regime_ok_ever:
+        body = ("0 trades - REGIME STAND-DOWN: SPY never closed above its opening range "
+                "before cutoff, so the filter blocked every entry. Working as designed.")
+    elif signals_seen == 0:
+        body = (f"0 trades - no qualifying breakout. Shortlist was "
+                f"{last_shortlist or 'empty'} (vol floor {params.get('min_or_width_frac')}).")
+    else:
+        body = f"0 trades - {signals_seen} signal(s) found but sizing/caps rejected them."
+    slackbot.post(
+        f"[TRADE] {today_str} entry session complete ({polls} poll(s), "
+        f"09:35-{params.get('cutoff_et', '10:30')} ET).\n{body}\n"
+        f"regime_filter={regime_filter} | rs_topk={params.get('rs_topk')} | "
+        f"max_positions={max_positions}")
 
 
 def _append_paper_day(equity, day_pnl, n_flat, n_cancelled, carried=0):

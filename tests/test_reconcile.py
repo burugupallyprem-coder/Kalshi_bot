@@ -33,6 +33,29 @@ def test_write_ledger_has_six_col_header_and_no_gaps():
     assert len(lines) == 3  # header + 2 authoritative days
 
 
+def test_sanity_rejects_flat_baseline():
+    # the exact 2026-07-21 failure: flat 100000 line while account is at 99793
+    rows = [("2026-07-16", 100000.0, 0.0), ("2026-07-17", 100000.0, 0.0)]
+    ok, why = reconcile.sanity_check(rows, 99793.43)
+    assert not ok and "disagrees" in why
+
+
+def test_sanity_rejects_all_identical_equity():
+    rows = [("2026-07-16", 100000.0, 0.0), ("2026-07-17", 100000.0, 0.0)]
+    ok, why = reconcile.sanity_check(rows, 100000.0)
+    assert not ok and "flat line" in why
+
+
+def test_sanity_accepts_history_matching_account():
+    rows = [("2026-07-16", 100000.0, 0.0), ("2026-07-17", 99793.22, -206.78)]
+    ok, why = reconcile.sanity_check(rows, 99793.22)
+    assert ok
+
+
+def test_sanity_rejects_empty():
+    assert reconcile.sanity_check([], 100000.0)[0] is False
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

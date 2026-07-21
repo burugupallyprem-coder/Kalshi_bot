@@ -14,6 +14,7 @@ import csv
 from datetime import datetime, timezone
 from pathlib import Path
 
+from src import slackbot
 from src.alpaca_client import AlpacaClient
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -51,10 +52,42 @@ def write_ledger(rows, out=None):
     return out
 
 
-def main():
-    rows = rebuild()
+def sanity_check(rows, account_equity, tol=1.0):
+    """Refuse to trust portfolio history that contradicts the live account.
+
+    Learned the hard way 2026-07-21: portfolio/history returned a flat baseline
+    (every day 100000.00 / 0.00) while the account was actually at 99,793 - and
+    the old code happily overwrote a correct ledger with it. Never again: if the
+    most recent reconstructed equity disagrees with the broker's current equity,
+    the data is not authoritative and we do NOT write."""
     if not rows:
-        print("[reconcile] no portfolio history returned - leaving ledger untouched")
+        return False, "no portfolio history returned"
+    last_equity = float(rows[-1][1])
+    if abs(last_equity - float(account_equity)) > tol:
+        return False, (f"history disagrees with account: last reconstructed equity "
+                       f"${last_equity:,.2f} vs live equity ${float(account_equity):,.2f}")
+    distinct = {round(float(r[1]), 2) for r in rows}
+    if len(distinct) == 1:
+        return False, (f"history is a flat line at ${last_equity:,.2f} across "
+                       f"{len(rows)} days - not real data")
+    return True, "history agrees with the live account"
+
+
+def main():
+    client = AlpacaClient()
+    rows = rebuild(client=client)
+    equity = float(client.account()["equity"])
+    ok, why = sanity_check(rows, equity)
+    if not ok:
+        msg = (f"[RECONCILE][ABORTED] Ledger NOT rewritten - {why}. "
+               f"Existing data/paper_days.csv left untouched. "
+               f"Alpaca portfolio/history is not usable as-is; the EOD writer remains "
+               f"the source of truth until this is fixed.")
+        print(msg)
+        try:
+            slackbot.post(msg)
+        except Exception as e:
+            print(f"[reconcile] slack post failed: {e}")
         return
     out = write_ledger(rows)
     print(f"[reconcile] rewrote {out} with {len(rows)} authoritative day(s) from Alpaca")
