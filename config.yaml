@@ -103,6 +103,36 @@ research:   # Phase 1.5 disciplined sweep - grids PRE-DECLARED, gate applies to 
       hold_above: [3, 6]
       time_stop_bars: [24, 36]
 
+strategy10:   # Peter's 3-step "boring" scalp ported from the FX repo - RESEARCH ONLY, own simulator.
+  # 1-minute execution: daily 9/21 EMA direction, prev-day high/low ZONES + the first
+  # 5-minute opening range, break-and-retest entry, swing-TRAILING stop, flat 15:50 ET.
+  # Runs on 1Min bars (5x the 5Min data), so the universe is a liquid subset to keep the
+  # download/sim tractable in a manual workflow. Judged on the same gate as everything else.
+  universe: [SPY, QQQ, AAPL, MSFT, NVDA, AMZN, META, TSLA, AMD, GOOGL]
+  timeframe: 1Min
+  feed: sip                 # historical SIP on the free plan; auto-falls back to IEX
+  open_bars: 5              # first 5 one-minute bars = the opening range
+  cutoff_et: "15:50"        # no logic beyond flat time; entries allowed through the session
+  ema_fast: 9
+  ema_slow: 21
+  zone_frac: 0.05           # PDH/PDL zone half-width = zone_frac x prev-day range
+  stop_buf_frac: 0.10       # initial stop behind broken level = stop_buf_frac x prev-day range
+  min_stop_cost_mult: 2.0   # skip setups whose initial stop < 2x round-trip slippage
+  train_start: "2024-07-01"
+  train_end: "2025-12-31"
+  val_start: "2026-01-01"
+  val_end: null
+  min_train_trades: 100
+  min_train_expectancy_r: 0.02
+  slippage_sensitivity_cents: [0.5, 2.0]
+  walkforward:
+    folds: 4
+    min_positive_frac: 0.6
+  grids:
+    trail_lookback: [10, 20]
+    trend_filter: [false, true]
+    max_trades_day: [1, 2]
+
 live:   # Phase 2 paper deployment - PROMOTED filtered ORB.
   # PASS on 2026-07-18: train +0.105R/PF1.334 AND validation +0.082R/PF1.289 agree,
   # survives 2c slippage, walk-forward 3/4 folds. This is a CANDIDATE on a fresh

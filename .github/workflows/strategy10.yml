@@ -1,0 +1,56 @@
+name: strategy10
+
+on:
+  workflow_dispatch:   # manual only - research backtest of the ported 3-step boring scalp
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reports-commit
+  cancel-in-progress: false
+
+jobs:
+  strategy10:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180   # 1-minute bars over the liquid subset = a large download
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Integrity check (guards against corrupted files)
+        run: python -m compileall -q src tests
+
+      - name: Unit tests
+        run: |
+          python tests/test_offline.py
+          python tests/test_strategy10_scalp.py
+
+      - name: Run strategy #10 stock backtest
+        env:
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+        run: python -m src.backtest.strategy10_scalp
+
+      - name: Commit reports
+        run: |
+          git config user.name "stock-trader-bot"
+          git config user.email "stock-trader-bot@users.noreply.github.com"
+          for i in 1 2 3; do
+            git fetch origin main
+            git reset --soft origin/main
+            git add reports/
+            if git diff --cached --quiet; then echo "nothing to commit"; break; fi
+            git commit -m "strategy10 stock research $(date -u +%Y%m%dT%H%M%SZ)"
+            if git push origin HEAD:main; then break; fi
+            echo "push race - retry $i"
+            sleep $((RANDOM % 10 + 5))
+          done
