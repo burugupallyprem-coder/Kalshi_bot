@@ -407,6 +407,12 @@
    "utc": "2026-07-22 14:31",
    "ok": true,
    "outcome": "success"
+  },
+  {
+   "wf": "trade-entry",
+   "utc": "2026-07-22 14:37",
+   "ok": true,
+   "outcome": "success"
   }
  ]
 }
