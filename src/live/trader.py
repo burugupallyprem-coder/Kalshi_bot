@@ -51,7 +51,7 @@ def now_et():
     return datetime.now(ET)
 
 
-MAX_WAIT_MIN = 250   # jobs arrive HOURS early (GitHub cron is unreliable) and wait; public repo = free minutes
+MAX_WAIT_MIN = 300   # jobs arrive HOURS early (GitHub cron is unreliable) and wait; public repo = free minutes
 
 
 def _minutes_to_open(clock):
@@ -184,7 +184,22 @@ def run_entry_session(cfg, client=None, sleep_fn=time_mod.sleep):
     if now_et().time() < session_start:
         _sleep_until_et(session_start, sleep_fn, "entry-session")
     if now_et().time() >= cutoff:
-        print("[entry-session] past cutoff - nothing to do")
+        today = now_et().strftime("%Y-%m-%d")
+        marker = ROOT / "data" / "last_entry.json"
+        already_ran = False
+        try:
+            already_ran = json.loads(marker.read_text()).get("date") == today
+        except Exception:
+            already_ran = False
+        if already_ran:
+            print("[entry-session] past cutoff - a session already ran today, staying quiet")
+            return
+        print("[entry-session] past cutoff and no session ran today - late scheduler")
+        slackbot.post(
+            f"[TRADE] {today} - NO SESSION. Entry job started at "
+            f"{now_et().strftime('%H:%M')} ET, past the {params.get('cutoff_et','10:30')} ET "
+            f"cutoff, so no trades were possible. This means GitHub delivered the schedule "
+            f"late - a scheduling problem, NOT a strategy decision. Investigate cron timing.")
         return
     armed, arm_reason = load_arming(cfg)
     if not armed:
@@ -213,6 +228,12 @@ def run_entry_session(cfg, client=None, sleep_fn=time_mod.sleep):
     attempted = set()
     placed = []
     polls = 0
+    try:
+        (ROOT / "data").mkdir(exist_ok=True)
+        (ROOT / "data" / "last_entry.json").write_text(json.dumps(
+            {"date": now_et().strftime("%Y-%m-%d"), "started_et": now_et().strftime("%H:%M")}))
+    except Exception as e:
+        print(f"[entry-session] could not write run marker: {e}")
     regime_ok_ever = False
     last_shortlist = []
     signals_seen = 0
@@ -368,8 +389,12 @@ def run_eod_flatten(cfg, client=None, sleep_fn=time_mod.sleep):
     if not positions and not open_orders:
         # Flat and closed - the on-time tick owns clean flat days and reconcile.py
         # is the authoritative backfill. Don't write speculative holiday rows.
-        print("[eod] market closed, account already flat - nothing to flatten; "
-              "on-time tick / reconcile.py own the ledger row")
+        print("[eod] market closed, account already flat - nothing to flatten")
+        slackbot.post(
+            f"[EOD] {today} - no action. EOD tick ran at {now_et().strftime('%H:%M')} ET "
+            f"(after the close) and the account was already flat: no positions, no open "
+            f"orders, nothing to cancel. No ledger row written for today.\n"
+            f"If you see this every day, the EOD schedule is arriving late - investigate.")
         return
     try:
         client.cancel_all_orders()

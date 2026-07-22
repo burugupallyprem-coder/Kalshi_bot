@@ -115,6 +115,37 @@ def test_rs_topk_limits_to_strongest():
     assert c.placed == ["NVDA"]   # NVDA had the higher relative-strength score
 
 
+def _run_at(cfg, client, hh, mm, root):
+    posts=[]
+    real_now, real_post, real_root = tm.now_et, tm.slackbot.post, tm.ROOT
+    tm.now_et = lambda: datetime(2026,7,6,hh,mm,tzinfo=ET)
+    tm.slackbot.post = lambda *a, **k: posts.append(a[0] if a else "")
+    tm.ROOT = root
+    try:
+        tm.run_entry_session(cfg, client=client, sleep_fn=lambda _s: None)
+    finally:
+        tm.now_et, tm.slackbot.post, tm.ROOT = real_now, real_post, real_root
+    return posts
+
+
+def test_past_cutoff_posts_late_scheduler_warning():
+    import tempfile, pathlib
+    root = pathlib.Path(tempfile.mkdtemp()); (root/"data").mkdir()
+    c = EntryMock({"SPY": SPY_UP, "NVDA": NVDA})
+    posts = _run_at(_cfg(["SPY","NVDA"], PARAMS), c, 11, 0, root)   # 11:00 ET, cutoff 10:30
+    assert any("NO SESSION" in p for p in posts)
+    assert c.placed == []
+
+
+def test_past_cutoff_quiet_if_session_already_ran():
+    import tempfile, pathlib, json as _j
+    root = pathlib.Path(tempfile.mkdtemp()); (root/"data").mkdir()
+    (root/"data"/"last_entry.json").write_text(_j.dumps({"date":"2026-07-06","started_et":"09:35"}))
+    c = EntryMock({"SPY": SPY_UP, "NVDA": NVDA})
+    posts = _run_at(_cfg(["SPY","NVDA"], PARAMS), c, 11, 0, root)
+    assert not any("NO SESSION" in p for p in posts)   # deduped - a real session already ran
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

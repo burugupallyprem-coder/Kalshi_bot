@@ -9,9 +9,12 @@ on:
         default: "entry-session"
   schedule:
     # ENTRY ticks - staggered hours early; code waits until 09:35 ET, extras no-op past cutoff
+    - cron: "30 9 * * 1-5"
+    - cron: "0 10 * * 1-5"
     - cron: "37 10 * * 1-5"
     - cron: "37 11 * * 1-5"
     - cron: "37 12 * * 1-5"
+    - cron: "5 13 * * 1-5"
     - cron: "19 13 * * 1-5"
     # EOD ticks - DENSE and staggered so at least one survives GitHub's dropped
     # crons and lands in the 15:30-15:50 ET flatten window; code waits until
