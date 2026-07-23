@@ -73,6 +73,12 @@ class AlpacaClient:
     def open_orders(self):
         return self._get("/v2/orders", params={"status": "open", "limit": 500})
 
+    def orders_after(self, after_iso, limit=500):
+        """All orders (any status) created at/after after_iso - used to detect
+        whether an entry session already placed trades today (cross-run truth)."""
+        return self._get("/v2/orders", params={"status": "all", "after": after_iso,
+                                                "limit": limit}) or []
+
     # -- trading (paper) ---------------------------------------------------
 
     def place_bracket_order(self, symbol, qty, stop_price, target_price):

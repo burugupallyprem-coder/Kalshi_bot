@@ -164,6 +164,23 @@ def _bars_spy_long_ok(spy_bars, open_bars):
     return any(float(b["c"]) > hi for b in spy_bars[open_bars:])
 
 
+def _session_ran_today(client, today):
+    """Reliable across isolated GitHub runners: a session ran today if EITHER the
+    committed marker says so OR Alpaca shows an order placed today. The Alpaca
+    check is authoritative on days that traded (the marker can lose a commit race)."""
+    marker = ROOT / "data" / "last_entry.json"
+    try:
+        if json.loads(marker.read_text()).get("date") == today:
+            return True
+    except Exception:
+        pass
+    try:
+        start_iso = f"{today}T00:00:00Z"
+        return len(client.orders_after(start_iso)) > 0
+    except Exception:
+        return False
+
+
 def run_entry_session(cfg, client=None, sleep_fn=time_mod.sleep):
     live = cfg["live"]
     params = live["params"]
@@ -185,14 +202,8 @@ def run_entry_session(cfg, client=None, sleep_fn=time_mod.sleep):
         _sleep_until_et(session_start, sleep_fn, "entry-session")
     if now_et().time() >= cutoff:
         today = now_et().strftime("%Y-%m-%d")
-        marker = ROOT / "data" / "last_entry.json"
-        already_ran = False
-        try:
-            already_ran = json.loads(marker.read_text()).get("date") == today
-        except Exception:
-            already_ran = False
-        if already_ran:
-            print("[entry-session] past cutoff - a session already ran today, staying quiet")
+        if _session_ran_today(client, today):
+            print("[entry-session] past cutoff - a session already ran/traded today, staying quiet")
             return
         print("[entry-session] past cutoff and no session ran today - late scheduler")
         slackbot.post(

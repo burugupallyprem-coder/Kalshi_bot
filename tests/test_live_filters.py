@@ -146,6 +146,31 @@ def test_past_cutoff_quiet_if_session_already_ran():
     assert not any("NO SESSION" in p for p in posts)   # deduped - a real session already ran
 
 
+class OrdersMock(EntryMock):
+    def __init__(self, bars, orders_today):
+        super().__init__(bars)
+        self._orders_today = orders_today
+    def orders_after(self, after_iso, limit=500):
+        return self._orders_today
+
+
+def test_past_cutoff_quiet_when_alpaca_shows_todays_orders():
+    # marker missing (lost the commit race) but Alpaca shows an order placed today
+    import tempfile, pathlib
+    root = pathlib.Path(tempfile.mkdtemp()); (root/"data").mkdir()
+    c = OrdersMock({"SPY": SPY_UP, "NVDA": NVDA}, orders_today=[{"id": "abc", "symbol": "NVDA"}])
+    posts = _run_at(_cfg(["SPY","NVDA"], PARAMS), c, 11, 0, root)   # 11:00 ET, past 10:30
+    assert not any("NO SESSION" in p for p in posts)   # Alpaca truth -> stay quiet
+
+
+def test_past_cutoff_warns_when_no_marker_and_no_orders():
+    import tempfile, pathlib
+    root = pathlib.Path(tempfile.mkdtemp()); (root/"data").mkdir()
+    c = OrdersMock({"SPY": SPY_UP, "NVDA": NVDA}, orders_today=[])
+    posts = _run_at(_cfg(["SPY","NVDA"], PARAMS), c, 11, 0, root)
+    assert any("NO SESSION" in p for p in posts)   # genuinely nothing ran today
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
