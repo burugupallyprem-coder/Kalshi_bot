@@ -355,15 +355,41 @@ def _append_paper_day(equity, day_pnl, n_flat, n_cancelled, carried=0):
                     n_flat, n_cancelled, carried])
 
 
+def _poll_until(pred, tries, sleep_fn, step=5):
+    """Call pred() up to `tries` times, sleeping `step`s between, until it's True.
+    Returns pred()'s final value. Lets async cancels/liquidations actually settle
+    before we trust the account state."""
+    for _ in range(max(tries, 1)):
+        try:
+            if pred():
+                return True
+        except Exception:
+            pass
+        sleep_fn(step)
+    try:
+        return bool(pred())
+    except Exception:
+        return False
+
+
 def run_eod_flatten(cfg, client=None, sleep_fn=time_mod.sleep):
     client = client or AlpacaClient()  # paper-locked
 
-    # dedupe FIRST: a redundant cron tick must never double-flatten or double-log.
+    # dedupe FIRST: skip only if today was already recorded AS VERIFIED FLAT
+    # (positions_carried == 0). If an earlier tick left positions carried, a later
+    # tick SHOULD retry rather than skip - that is how an incomplete flatten heals.
     log_path = ROOT / "data" / "paper_days.csv"
     today = now_et().strftime("%Y-%m-%d")
-    if log_path.exists() and any(line.startswith(today) for line in log_path.read_text().splitlines()):
-        print("[eod] already flattened/logged today - skip")
-        return
+    if log_path.exists():
+        for line in log_path.read_text().splitlines():
+            if line.startswith(today):
+                cols = line.split(",")
+                carried = cols[5].strip() if len(cols) > 5 else "0"
+                if carried in ("", "0"):
+                    print("[eod] already verified flat today - skip")
+                    return
+                print("[eod] earlier tick left positions carried - retrying flatten")
+                break
 
     clock = client.clock()
     is_open = bool(clock.get("is_open"))
@@ -375,20 +401,45 @@ def run_eod_flatten(cfg, client=None, sleep_fn=time_mod.sleep):
             _sleep_until_et(dtime(15, 45), sleep_fn, "eod")
         positions = client.positions()
         open_orders = client.open_orders()
+        n_orders = len(open_orders)
+        n_positions = len(positions)
+
+        # 1) cancel bracket legs FIRST and WAIT for them to clear. Closing while
+        #    the stop/target legs are still alive gets the sell rejected
+        #    (shares held_for_orders) - the bug that carried positions overnight.
         client.cancel_all_orders()
+        _poll_until(lambda: len(client.open_orders()) == 0, tries=8, sleep_fn=sleep_fn)
+
+        # 2) liquidate, then VERIFY actually flat (don't trust the call - fills lag)
         if positions:
             client.close_all_positions()
+            _poll_until(lambda: len(client.positions()) == 0, tries=12, sleep_fn=sleep_fn)
+
+        remaining = client.positions()
+        carried = len(remaining)
         account = client.account()
         equity = float(account["equity"])
         last_equity = float(account.get("last_equity") or equity)
         day_pnl = equity - last_equity
-        _append_paper_day(equity, day_pnl, len(positions), len(open_orders), carried=0)
-        slackbot.post(
-            f"[EOD] {today} paper recap\n"
-            f"Equity ${equity:,.2f} | day P&L ${day_pnl:+,.2f}\n"
-            f"Flattened {len(positions)} position(s), cancelled {len(open_orders)} order(s). "
-            f"Everything is cash overnight - by design.")
-        print(f"[eod] equity {equity:.2f} day_pnl {day_pnl:+.2f}")
+        _append_paper_day(equity, day_pnl, n_positions - carried, n_orders, carried=carried)
+
+        if carried == 0:
+            slackbot.post(
+                f"[EOD] {today} paper recap\n"
+                f"Equity ${equity:,.2f} | day P&L ${day_pnl:+,.2f}\n"
+                f"Flattened {n_positions} position(s), cancelled {n_orders} order(s) - "
+                f"VERIFIED flat. Everything is cash overnight - by design.")
+            print(f"[eod] verified flat: equity {equity:.2f} day_pnl {day_pnl:+.2f}")
+        else:
+            names = ", ".join(f"{p.get('symbol','?')}x{p.get('qty','?')}" for p in remaining)
+            slackbot.post(
+                f"[EOD][WARNING] {today} - FLATTEN INCOMPLETE. Equity ${equity:,.2f} "
+                f"(includes UNREALIZED value of open positions).\n"
+                f"{carried} position(s) did NOT close and are carrying overnight "
+                f"UNPROTECTED: {names}. The sell orders did not fill (submitted too "
+                f"close to the bell or held by bracket legs). MANUAL ACTION: cancel any "
+                f"stale sell orders in Alpaca, then close these positions.")
+            print(f"[eod][WARN] flatten incomplete - carried {carried}: {names}")
         return
 
     # Late/missed path: market already closed when this tick ran. We cannot

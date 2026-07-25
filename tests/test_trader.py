@@ -69,9 +69,12 @@ class MockClient:
 
     def cancel_all_orders(self):
         self.cancelled = True
+        self._open_orders = []
 
     def close_all_positions(self):
         self.closed = True
+        if not getattr(self, "wont_close", False):
+            self._positions = []      # fills settle -> account goes flat
 
     def account(self):
         return {"equity": "100100.00", "last_equity": "100000.00"}
@@ -128,10 +131,29 @@ def test_eod_flatten_flattens(monkey_posts=None):
     trader_mod.now_et = lambda: real_now().replace(hour=15, minute=46)
     try:
         c = MockClient(is_open=True)
-        run_eod_flatten({"live": {}}, client=c)
+        run_eod_flatten({"live": {}}, client=c, sleep_fn=lambda _s: None)
         assert c.cancelled and c.closed
-        assert monkey_posts and "[EOD]" in monkey_posts[-1]
+        assert monkey_posts and "[EOD]" in monkey_posts[-1] and "VERIFIED flat" in monkey_posts[-1]
         assert "+100.00" in monkey_posts[-1]
+    finally:
+        trader_mod.ROOT, trader_mod.slackbot.post, trader_mod.now_et = (
+            real_root, real_post, real_now)
+
+
+def test_eod_flatten_incomplete_warns(monkey_posts=None):
+    # positions refuse to close (sell orders never fill) -> must WARN, not claim success
+    monkey_posts = [] if monkey_posts is None else monkey_posts
+    real_root, real_post, real_now = (trader_mod.ROOT, trader_mod.slackbot.post,
+                                      trader_mod.now_et)
+    trader_mod.ROOT = _isolated_root()
+    trader_mod.slackbot.post = lambda *a, **k: monkey_posts.append(a[0] if a else "")
+    trader_mod.now_et = lambda: real_now().replace(hour=15, minute=46)
+    try:
+        c = MockClient(is_open=True, positions=[{"symbol": "AAPL", "qty": "60"}])
+        c.wont_close = True
+        run_eod_flatten({"live": {}}, client=c, sleep_fn=lambda _s: None)
+        assert monkey_posts and "WARNING" in monkey_posts[-1]
+        assert "FLATTEN INCOMPLETE" in monkey_posts[-1] and "AAPL" in monkey_posts[-1]
     finally:
         trader_mod.ROOT, trader_mod.slackbot.post, trader_mod.now_et = (
             real_root, real_post, real_now)

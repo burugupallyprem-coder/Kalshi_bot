@@ -132,6 +132,24 @@ strategy10:   # Peter's 3-step "boring" scalp ported from the FX repo - RESEARCH
     trail_lookback: [10, 20]
     trend_filter: [false, true]
     max_trades_day: [1, 2]
+  # FORWARD paper-validation trial: the backtest winner is FROZEN here and measured
+  # ONLY on data from lock_date onward - a fresh out-of-sample window nobody has
+  # picked over. Pre-registered 2026-07-23 (see PRE_REGISTRATION_STRATEGY10.md).
+  # NO moving goalposts: these are the numbers, unchanged, until the sample is reached.
+  forward:
+    frozen:                 # the [BACKTEST-S10] validation winner - not re-searched
+      trail_lookback: 20
+      trend_filter: false
+      max_trades_day: 2
+    lock_date: "2026-07-23"
+    warmup_days: 30         # fetched before lock_date so prev-day levels/EMA exist; NOT scored
+    interim_trades: 100     # first honest look
+    target_trades: 300      # meaningful sample for a verdict
+    gate:                   # same bar as everything else
+      min_trades: 100
+      min_expectancy_r: 0.05
+      min_profit_factor: 1.15
+      min_quarters_positive_frac: 0.6
 
 live:   # Phase 2 paper deployment - PROMOTED filtered ORB.
   # PASS on 2026-07-18: train +0.105R/PF1.334 AND validation +0.082R/PF1.289 agree,

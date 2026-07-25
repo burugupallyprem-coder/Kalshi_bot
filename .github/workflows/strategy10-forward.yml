@@ -1,0 +1,58 @@
+name: strategy10-forward
+
+on:
+  workflow_dispatch:        # manual look any time
+  schedule:
+    - cron: "0 14 * * 6"    # Saturdays 14:00 UTC - weekly forward-trial update
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reports-commit
+  cancel-in-progress: false
+
+jobs:
+  strategy10forward:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60      # only fetches lock_date-warmup -> now (small window)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Integrity check (guards against corrupted files)
+        run: python -m compileall -q src tests
+
+      - name: Unit tests
+        run: |
+          python tests/test_strategy10_scalp.py
+          python tests/test_strategy10_scalp_forward.py
+
+      - name: Run strategy #10 forward trial
+        env:
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+        run: python -m src.backtest.strategy10_scalp_forward
+
+      - name: Commit reports
+        run: |
+          git config user.name "stock-trader-bot"
+          git config user.email "stock-trader-bot@users.noreply.github.com"
+          for i in 1 2 3; do
+            git fetch origin main
+            git reset --soft origin/main
+            git add reports/
+            if git diff --cached --quiet; then echo "nothing to commit"; break; fi
+            git commit -m "strategy10 forward trial $(date -u +%Y%m%dT%H%M%SZ)"
+            if git push origin HEAD:main; then break; fi
+            echo "push race - retry $i"
+            sleep $((RANDOM % 10 + 5))
+          done
