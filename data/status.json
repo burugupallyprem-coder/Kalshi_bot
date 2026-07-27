@@ -1,18 +1,6 @@
 {
  "runs": [
   {
-   "wf": "trade-eod",
-   "utc": "2026-07-10 21:42",
-   "ok": true,
-   "outcome": "success"
-  },
-  {
-   "wf": "research",
-   "utc": "2026-07-11 15:37",
-   "ok": true,
-   "outcome": "success"
-  },
-  {
    "wf": "research",
    "utc": "2026-07-11 18:01",
    "ok": true,
@@ -595,8 +583,20 @@
    "outcome": "success"
   },
   {
+   "wf": "premarket",
+   "utc": "2026-07-27 12:45",
+   "ok": true,
+   "outcome": "success"
+  },
+  {
+   "wf": "premarket",
+   "utc": "2026-07-27 13:30",
+   "ok": true,
+   "outcome": "success"
+  },
+  {
    "wf": "trade-entry",
-   "utc": "2026-07-27 14:31",
+   "utc": "2026-07-27 14:32",
    "ok": true,
    "outcome": "success"
   }
