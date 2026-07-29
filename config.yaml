@@ -207,7 +207,7 @@ futures_stage2:   # Stage 2: LOCKED momentum on REAL futures (Databento). RESEAR
   end: null                    # null = latest
   val_start: "2023-07-01"      # ALL futures data is out-of-sample (params locked on stocks) -> judge on full span
   timeframe: "5Min"            # resampled from 1m so confirm_bar=12 == ~10:30 ET
-  max_cost_usd: 20.0           # ABORT the download if Databento estimates more than this (free credit is $125)
+  max_cost_usd: 30.0           # ABORT the download if Databento estimates more than this (free credit is $125)
   skip_cost_check: false       # true only to bypass the pre-flight cost guard
   commission_per_side: 0.50    # $/side/contract - VERIFY with your broker
   ticks_spread_per_side: 0.5   # half-tick spread assumption (optimistic; widen for MYM)

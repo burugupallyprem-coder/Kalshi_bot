@@ -73,7 +73,11 @@ def preflight_cost(client, symbols, cfg):
 
 def load(symbols, cfg):
     """Returns {symbol: RTH DataFrame} ready for the engine (symbol/o/h/l/c/v/et/date)."""
+    from datetime import datetime, timezone
     fs = cfg["futures_stage2"]
+    if not fs.get("end"):   # end=None makes Databento return an EMPTY range - pin it
+        fs["end"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    print(f"[futures_data] window {fs['start']} -> {fs['end']}", flush=True)
     tf = fs.get("timeframe", "5Min")
     client = _client()
     cap = float(fs.get("max_cost_usd", 20.0))
