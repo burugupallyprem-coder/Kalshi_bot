@@ -193,4 +193,5 @@ arming:   # kill-switch: does the entry session place trades at all?
 futures_proxy:   # Stage 1: do ANY signals have edge on the INDEX (micro-futures proxy)? RESEARCH ONLY, manual dispatch.
   universe: [SPY, QQQ, DIA, IWM]
   proxy_map: {SPY: MES, QQQ: MNQ, DIA: MYM, IWM: M2K}
-  strategies: [orb, vwap_revert, momentum]   # each tested on the index with its own pre-declared research grid
+  strategies: [orb, vwap_revert, momentum]
+  diag_strategy: momentum   # which WEAK-PASS/near-miss to scrutinize   # each tested on the index with its own pre-declared research grid
