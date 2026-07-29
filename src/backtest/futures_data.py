@@ -89,6 +89,22 @@ def load(symbols, cfg):
             raise RuntimeError(f"Databento cost ${cost:.2f} exceeds cap ${cap:.2f} - "
                                f"aborting before spending. Raise futures_stage2.max_cost_usd to proceed.")
     df1 = _fetch_1m(client, symbols, cfg)
+    print(f"[futures_data] fetched {len(df1):,} raw 1-min records for {symbols}", flush=True)
+    if df1.empty:
+        raise RuntimeError(
+            "Databento returned 0 records. Most likely the CME/GLBX.MDP3 dataset is not "
+            "enabled on your account - open the Databento portal -> Datasets -> "
+            "CME Globex MDP 3.0 and ACCEPT THE CME LICENSE, then re-run. "
+            "(Other possibilities: continuous symbol format, or start date before data coverage.)")
     dfN = resample(df1, tf)
+    print(f"[futures_data] {len(dfN):,} bars after resample to {tf}; "
+          f"symbols seen: {sorted(dfN['symbol'].unique())}", flush=True)
     rth = data_mod.rth_only(dfN)   # adds 'et' + 'date', keeps 09:30-16:00 ET
-    return {sym: g.reset_index(drop=True) for sym, g in rth.groupby("symbol")}
+    print(f"[futures_data] {len(rth):,} bars after RTH filter", flush=True)
+    if rth.empty:
+        raise RuntimeError(
+            f"fetched {len(df1):,} 1-min records but 0 survived the RTH filter - a timezone or "
+            "price-scale issue in _fetch_1m; verify the ts conversion against a known bar.")
+    out = {sym: g.reset_index(drop=True) for sym, g in rth.groupby("symbol")}
+    print(f"[futures_data] loaded symbols: {sorted(out)}", flush=True)
+    return out
