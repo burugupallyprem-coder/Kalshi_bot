@@ -190,18 +190,7 @@ arming:   # kill-switch: does the entry session place trades at all?
     min_sessions: 10             # need this many logged days before judging
     max_drawdown_pct: 6.0        # alert if live paper drawdown exceeds this
 
-futures_proxy:   # Stage 1: does ORB have edge on the INDEX (micro-futures proxy)? RESEARCH ONLY, manual dispatch.
+futures_proxy:   # Stage 1: do ANY signals have edge on the INDEX (micro-futures proxy)? RESEARCH ONLY, manual dispatch.
   universe: [SPY, QQQ, DIA, IWM]
   proxy_map: {SPY: MES, QQQ: MNQ, DIA: MYM, IWM: M2K}
-  framings:
-    single_instrument: {rs_topk: null}   # trade each index alone (single-contract realism)
-    index_basket: {rs_topk: 2}           # trade the 2 strongest of 4 (basket relative strength)
-  fixed:
-    side: long
-    open_bars: 3
-    cutoff_et: "10:30"
-    vol_confirm: false
-    min_or_width_frac: 0.004
-    regime_filter: true
-  grid:
-    rr: [1.5, 2.0]
+  strategies: [orb, vwap_revert, momentum]   # each tested on the index with its own pre-declared research grid

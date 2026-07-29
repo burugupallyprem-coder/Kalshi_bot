@@ -23,11 +23,13 @@ CFG = {
     "futures_proxy": {
         "universe": ["SPY", "QQQ", "DIA", "IWM"],
         "proxy_map": {"SPY": "MES", "QQQ": "MNQ", "DIA": "MYM", "IWM": "M2K"},
-        "framings": {"single_instrument": {"rs_topk": None}, "index_basket": {"rs_topk": 2}},
-        "fixed": {"side": "long", "open_bars": 3, "cutoff_et": "10:30",
-                  "vol_confirm": False, "min_or_width_frac": 0.004, "regime_filter": True},
-        "grid": {"rr": [1.5, 2.0]},
+        "strategies": ["orb"],
     },
+}
+CFG["research"]["grids"] = {
+    "orb": {"side": ["long"], "open_bars": [3], "cutoff_et": ["10:30"],
+            "rr": [1.5, 2.0], "vol_confirm": [False],
+            "min_or_width_frac": [0.004], "regime_filter": [True], "rs_topk": [None]},
 }
 
 
@@ -62,22 +64,20 @@ def make_bars():
     return pd.DataFrame(rows)
 
 
-def test_evaluate_framing_runs_and_returns_structure():
+def test_evaluate_strategy_runs_and_returns_structure():
     bars = make_bars()
-    for fr in CFG["futures_proxy"]["framings"].values():
-        r = FP.evaluate_framing(bars, CFG, fr)
-        assert r["verdict"] in ("PASS", "FAIL", "SKIP")
-        if r["val"] is not None:
-            assert "expectancy_r" in r["val"] and "trades" in r["val"]
-            assert isinstance(r["wf"], tuple) and len(r["wf"]) == 3
+    r = FP.evaluate_strategy(bars, CFG, "orb")
+    assert r["verdict"] in ("PASS", "WEAK PASS", "FAIL", "SKIP")
+    if r["val"] is not None:
+        assert "expectancy_r" in r["val"] and "trades" in r["val"]
+        assert isinstance(r["wf"], tuple) and len(r["wf"]) == 3
 
 
-def test_single_instrument_trades_all_four_indices():
-    # rs_topk=None must NOT restrict the universe (all 4 indices eligible)
+def test_orb_produces_a_winner_on_the_index_universe():
     bars = make_bars()
-    r = FP.evaluate_framing(bars, CFG, {"rs_topk": None})
-    # with breakouts on every symbol/day and min_train_trades=1, we should get a winner
-    assert r["best_combo"] is not None and r["train"]["trades"] > 0
+    r = FP.evaluate_strategy(bars, CFG, "orb")
+    # breakouts on every symbol/day + min_train_trades=1 -> a winner is chosen
+    assert r["combo"] is not None and r["train"]["trades"] > 0
 
 
 if __name__ == "__main__":
