@@ -1,0 +1,56 @@
+name: futures-proxy
+
+on:
+  workflow_dispatch:   # manual only - Stage 1 futures edge proxy (index ETFs as MES/MNQ/MYM/M2K)
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reports-commit
+  cancel-in-progress: false
+
+jobs:
+  futures-proxy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Integrity check (guards against corrupted files)
+        run: python -m compileall -q src tests
+
+      - name: Unit tests
+        run: |
+          python tests/test_offline.py
+          python tests/test_futures_proxy.py
+
+      - name: Run Stage 1 futures edge proxy
+        env:
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+        run: python -m src.backtest.futures_proxy
+
+      - name: Commit reports
+        run: |
+          git config user.name "stock-trader-bot"
+          git config user.email "stock-trader-bot@users.noreply.github.com"
+          for i in 1 2 3; do
+            git fetch origin main
+            git reset --soft origin/main
+            git add reports/
+            if git diff --cached --quiet; then echo "nothing to commit"; break; fi
+            git commit -m "futures proxy stage1 $(date -u +%Y%m%dT%H%M%SZ)"
+            if git push origin HEAD:main; then break; fi
+            echo "push race - retry $i"
+            sleep $((RANDOM % 10 + 5))
+          done
