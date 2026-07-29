@@ -60,10 +60,34 @@ def resample(df_1m, timeframe="5Min"):
     return pd.concat(frames, ignore_index=True) if frames else df_1m
 
 
+def preflight_cost(client, symbols, cfg):
+    """Ask Databento the EXACT $ cost of this query BEFORE downloading. Returns the
+    cost in USD. Never surprises you with a bill."""
+    fs = cfg["futures_stage2"]
+    dbt = fs["databento"]
+    conts = [f"{s}{dbt.get('continuous_suffix', '.c.0')}" for s in symbols]
+    return float(client.metadata.get_cost(
+        dataset=dbt.get("dataset", "GLBX.MDP3"), symbols=conts, stype_in="continuous",
+        schema=dbt.get("schema", "ohlcv-1m"), start=fs["start"], end=fs.get("end")))
+
+
 def load(symbols, cfg):
     """Returns {symbol: RTH DataFrame} ready for the engine (symbol/o/h/l/c/v/et/date)."""
-    tf = cfg["futures_stage2"].get("timeframe", "5Min")
+    fs = cfg["futures_stage2"]
+    tf = fs.get("timeframe", "5Min")
     client = _client()
+    cap = float(fs.get("max_cost_usd", 20.0))
+    if not fs.get("skip_cost_check", False):
+        try:
+            cost = preflight_cost(client, symbols, cfg)
+        except Exception as e:
+            raise RuntimeError(f"Databento cost preview failed ({e}); "
+                               f"set futures_stage2.skip_cost_check: true to override.")
+        print(f"[futures_data] Databento estimated cost for this pull: ${cost:.2f} "
+              f"(cap ${cap:.2f}, free credit $125)", flush=True)
+        if cost > cap:
+            raise RuntimeError(f"Databento cost ${cost:.2f} exceeds cap ${cap:.2f} - "
+                               f"aborting before spending. Raise futures_stage2.max_cost_usd to proceed.")
     df1 = _fetch_1m(client, symbols, cfg)
     dfN = resample(df1, tf)
     rth = data_mod.rth_only(dfN)   # adds 'et' + 'date', keeps 09:30-16:00 ET
