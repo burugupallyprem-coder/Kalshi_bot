@@ -1,0 +1,47 @@
+name: futures-stage2
+
+on:
+  workflow_dispatch:   # manual only - LOCKED momentum on REAL futures (Databento). RESEARCH ONLY.
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reports-commit
+  cancel-in-progress: false
+
+jobs:
+  futures-stage2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Integrity check
+        run: python -m compileall -q src tests
+      - name: Unit tests
+        run: |
+          python tests/test_offline.py
+          python tests/test_instruments.py
+          python tests/test_futures_backtest.py
+      - name: Run Stage 2 futures backtest
+        env:
+          DATABENTO_API_KEY: ${{ secrets.DATABENTO_API_KEY }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+        run: python -m src.backtest.futures_backtest
+      - name: Commit reports
+        run: |
+          git config user.name "stock-trader-bot"
+          git config user.email "stock-trader-bot@users.noreply.github.com"
+          for i in 1 2 3; do
+            git fetch origin main; git reset --soft origin/main; git add reports/
+            if git diff --cached --quiet; then echo "nothing"; break; fi
+            git commit -m "futures stage2 $(date -u +%Y%m%dT%H%M%SZ)"
+            if git push origin HEAD:main; then break; fi
+            sleep $((RANDOM % 10 + 5))
+          done

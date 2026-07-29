@@ -195,3 +195,25 @@ futures_proxy:   # Stage 1: do ANY signals have edge on the INDEX (micro-futures
   proxy_map: {SPY: MES, QQQ: MNQ, DIA: MYM, IWM: M2K}
   strategies: [orb, vwap_revert, momentum]
   diag_strategy: momentum   # which WEAK-PASS/near-miss to scrutinize   # each tested on the index with its own pre-declared research grid
+
+futures_stage2:   # Stage 2: LOCKED momentum on REAL futures (Databento). RESEARCH ONLY, manual dispatch.
+  primary: [MES, MNQ, MYM]     # large-cap micros (pre-declared hypothesis)
+  secondary: [M2K]             # Russell micro - reported, not required to pass
+  databento:
+    dataset: "GLBX.MDP3"
+    schema: "ohlcv-1m"
+    continuous_suffix: ".c.0"  # front month by volume
+  start: "2023-07-01"
+  end: null                    # null = latest
+  val_start: "2023-07-01"      # ALL futures data is out-of-sample (params locked on stocks) -> judge on full span
+  timeframe: "5Min"            # resampled from 1m so confirm_bar=12 == ~10:30 ET
+  commission_per_side: 0.50    # $/side/contract - VERIFY with your broker
+  ticks_spread_per_side: 0.5   # half-tick spread assumption (optimistic; widen for MYM)
+  locked_params:               # LOCKED Stage-1 winner - do NOT re-optimize on futures
+    side: long
+    confirm_bar: 12
+    rr: 3.0
+    stop_lookback: 12
+    hold_above: 3
+    time_stop_bars: 24
+    max_risk_frac: 0.015
