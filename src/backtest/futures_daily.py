@@ -14,6 +14,19 @@ import numpy as np
 import pandas as pd
 
 
+def _with_retry(fn, tries=3, sleep=4):
+    import time
+    last = None
+    for i in range(tries):
+        try:
+            return fn()
+        except Exception as e:
+            last = e
+            print(f"[futures_daily] attempt {i+1}/{tries} failed ({e}); retrying...", flush=True)
+            time.sleep(sleep * (i + 1))
+    raise last
+
+
 def _client(key=None):
     import databento as db
     return db.Historical(key or os.environ["DATABENTO_API_KEY"])
@@ -56,17 +69,27 @@ def load(universe, cfg):
         print(f"[futures_daily] Databento estimated cost: ${cost:.4f} (cap ${cap}, credit $125)", flush=True)
         if cost > cap:
             raise RuntimeError(f"cost ${cost:.2f} exceeds cap ${cap} - aborting")
-    data = client.timeseries.get_range(
-        dataset=dbt.get("dataset", "GLBX.MDP3"), symbols=conts, stype_in="continuous",
-        schema="ohlcv-1d", start=start, end=end)
-    raw = data.to_df().reset_index()
-    root = {f"{s}{dbt.get('continuous_suffix', '.v.0')}": s for s in universe}
-    raw["mkt"] = raw["symbol"].map(lambda x: root.get(x, str(x).split(".")[0]))
-    raw["date"] = pd.to_datetime(raw["ts_event"]).dt.date
-    print(f"[futures_daily] fetched {len(raw):,} daily rows, markets: {sorted(raw['mkt'].unique())}", flush=True)
+    dataset = dbt.get("dataset", "GLBX.MDP3")
+    suffix = dbt.get("continuous_suffix", ".v.0")
     cols = {}
-    for mkt, g in raw.groupby("mkt"):
-        cols[mkt] = _roll_adjusted_prices(g[["date", "close", "instrument_id"]])
+    for mkt in universe:   # one symbol per request - 21 roll-chains in one call times out
+        cont = f"{mkt}{suffix}"
+        try:
+            df = _with_retry(lambda c=cont: client.timeseries.get_range(
+                dataset=dataset, symbols=[c], stype_in="continuous",
+                schema="ohlcv-1d", start=start, end=end).to_df())
+        except Exception as e:
+            print(f"[futures_daily] {mkt}: giving up after retries ({e}) - skipping", flush=True)
+            continue
+        if df is None or len(df) == 0:
+            print(f"[futures_daily] {mkt}: 0 rows - skipping", flush=True)
+            continue
+        df = df.reset_index()
+        df["date"] = pd.to_datetime(df["ts_event"]).dt.date
+        cols[mkt] = _roll_adjusted_prices(df[["date", "close", "instrument_id"]])
+        print(f"[futures_daily] {mkt}: {len(df):,} daily rows", flush=True)
+    if not cols:
+        raise RuntimeError("no markets loaded - all per-symbol requests failed")
     prices = pd.DataFrame(cols).sort_index()
     prices = prices.ffill().dropna(how="all")
     print(f"[futures_daily] price panel: {prices.shape[0]} days x {prices.shape[1]} markets", flush=True)
