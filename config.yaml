@@ -233,7 +233,7 @@ tsmom:   # diversified trend-following (time-series momentum) - the one evidence
   target_vol: 0.10              # 10% annualized per-market vol target
   cost_per_turnover: 0.0005     # realistic futures cost in return/vol space
   cost_sensitivity: [0.001, 0.002]
-  max_cost_usd: 10.0
+  max_cost_usd: 32.0
   skip_cost_check: false
   gate:
     min_sharpe: 0.5             # modest but real, AFTER costs, OUT-OF-SAMPLE
