@@ -34,7 +34,9 @@ def _roll_adjusted_prices(df_market):
 def load(universe, cfg):
     ts = cfg["tsmom"]
     dbt = ts["databento"]
-    end = ts.get("end") or pd.Timestamp.utcnow().strftime("%Y-%m-%d")
+    # historical plan does not serve the most recent ~day (needs live sub); end a
+    # week back to stay safely inside the historical window (irrelevant over 16 yrs).
+    end = ts.get("end") or (pd.Timestamp.utcnow() - pd.Timedelta(days=7)).strftime("%Y-%m-%d")
     conts = [f"{s}{dbt.get('continuous_suffix', '.v.0')}" for s in universe]
     client = _client()
     start = ts["start"]
