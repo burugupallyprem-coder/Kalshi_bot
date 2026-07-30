@@ -225,7 +225,7 @@ tsmom:   # diversified trend-following (time-series momentum) - the one evidence
   databento:
     dataset: "GLBX.MDP3"
     continuous_suffix: ".v.0"   # volume roll (follows liquidity)
-  start: "2010-01-01"
+  start: "2010-06-08"
   end: null
   oos_start: "2019-01-01"       # pick lookback on <2019, judge ONCE on >=2019
   lookbacks: [63, 126, 252]     # 3 / 6 / 12-month trailing-return sign

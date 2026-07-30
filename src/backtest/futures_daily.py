@@ -37,17 +37,26 @@ def load(universe, cfg):
     end = ts.get("end") or pd.Timestamp.utcnow().strftime("%Y-%m-%d")
     conts = [f"{s}{dbt.get('continuous_suffix', '.v.0')}" for s in universe]
     client = _client()
+    start = ts["start"]
+    try:   # best-effort: never request before the dataset's available start
+        rng = client.metadata.get_dataset_range(dataset=dbt.get("dataset", "GLBX.MDP3"))
+        avail = str(rng.get("start", rng) if isinstance(rng, dict) else rng)[:10]
+        if avail and avail > start:
+            print(f"[futures_daily] clamping start {start} -> dataset start {avail}", flush=True)
+            start = avail
+    except Exception as e:
+        print(f"[futures_daily] dataset-range check skipped ({e})", flush=True)
     if not ts.get("skip_cost_check", False):
         cost = float(client.metadata.get_cost(
             dataset=dbt.get("dataset", "GLBX.MDP3"), symbols=conts, stype_in="continuous",
-            schema="ohlcv-1d", start=ts["start"], end=end))
+            schema="ohlcv-1d", start=start, end=end))
         cap = float(ts.get("max_cost_usd", 5.0))
         print(f"[futures_daily] Databento estimated cost: ${cost:.4f} (cap ${cap}, credit $125)", flush=True)
         if cost > cap:
             raise RuntimeError(f"cost ${cost:.2f} exceeds cap ${cap} - aborting")
     data = client.timeseries.get_range(
         dataset=dbt.get("dataset", "GLBX.MDP3"), symbols=conts, stype_in="continuous",
-        schema="ohlcv-1d", start=ts["start"], end=end)
+        schema="ohlcv-1d", start=start, end=end)
     raw = data.to_df().reset_index()
     root = {f"{s}{dbt.get('continuous_suffix', '.v.0')}": s for s in universe}
     raw["mkt"] = raw["symbol"].map(lambda x: root.get(x, str(x).split(".")[0]))
