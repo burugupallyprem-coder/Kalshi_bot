@@ -1,80 +1,84 @@
-# stock-trader-bot
+# Systematic Trading Research Platform
 
-Autonomous stock day-trading research bot. **Paper account only** — the code contains a hard PAPER LOCK: the live endpoint raises an error unless an unlock phrase is set, which stays off until every roadmap gate passes (3+ months positive paper, immigration attorney + DSO sign-off, explicit owner approval).
+A from-scratch quantitative research platform for designing, backtesting, and paper-deploying
+intraday and cross-asset systematic strategies — built with an emphasis on **methodological
+rigor over P&L**. The defining feature of this project is not a winning strategy; it is an
+evaluation pipeline disciplined enough to **honestly reject its own ideas** when they fail
+out-of-sample.
 
-Pipeline: **Alpaca (paper) + Slack + GitHub Actions.**
+> **Research / paper-trading only.** No live capital is traded. The broker client is
+> hard-locked to paper endpoints.
 
-## Setup (one time, ~10 min)
+---
 
-1. Push this folder to your GitHub repo (see commands below).
-2. Add four repo secrets (Settings -> Secrets and variables -> Actions):
+## Why this project is different
 
-| Secret | Value |
-|---|---|
-| `ALPACA_API_KEY_ID` | Alpaca **paper** API key ID |
-| `ALPACA_SECRET_KEY` | Alpaca **paper** secret key |
-| `SLACK_BOT_TOKEN` | Slack bot token (starts `xoxb-`) |
-| `SLACK_CHANNEL_ID` | Channel ID (looks like `C0123ABCD` - not the channel name) |
+Most retail strategy repos show a single, beautiful, over-fit backtest. This one is built to
+do the opposite — to *catch* over-fitting before it costs money:
 
-3. Slack: the bot needs the `chat:write` scope and must be **invited to the channel** (`/invite @YourBotName` in the channel).
-4. Actions tab -> `bot` workflow -> Run workflow -> mode `heartbeat`.
+- **Pre-registration.** Parameter grids and success gates are declared *before* each run; no
+  moving the goalposts after seeing results.
+- **Train / validation separation.** Parameters are chosen on a training window and judged
+  **once** on untouched out-of-sample data.
+- **Walk-forward validation.** A strategy must hold up across multiple sequential folds, not a
+  single lucky window.
+- **Realistic costs.** Slippage and (for futures) tick-spread + commission are charged against
+  every trade; a "WEAK PASS" label flags edges that only survive on zero-cost assumptions.
+- **No-lookahead engine.** Signals never see the bar they trade on; stops are checked before
+  targets; gaps fill on the unfavorable side.
+- **Bootstrap significance + regime breakdowns** on any candidate that clears the gate.
 
-Expected in Slack within ~1 min:
+## The honest scorecard
 
-```
-[HEARTBEAT] 2026-07-10 14:02 UTC
-Account: ACTIVE - equity $100,000.00 - buying power $200,000.00 - blocked: no
-Market: OPEN (closes 2026-07-10T20:00:00-04:00)
-stock-trader-bot Phase 0 is alive. Paper account only.
-```
+Every strategy below was run through the *same* pre-registered gate (net expectancy, profit
+factor, walk-forward, cost sensitivity). The results are reported as they came:
 
-A pre-market heartbeat also runs automatically weekdays at 13:00 UTC.
+| Strategy | Asset class | Verdict |
+|---|---|---|
+| Opening-Range Breakout (filtered: regime + relative-strength) | US equities (intraday) | Deployed to paper as a measured benchmark |
+| VWAP mean-reversion | US equities | Rejected — no out-of-sample edge |
+| Momentum continuation | US equities | Rejected |
+| 3-step break-and-retest scalp | US equities (1-min) | Weak pass; flagged fragile |
+| Momentum on index futures | MES/MNQ/MYM (real Databento data) | Rejected — edge did not survive real costs |
+| Diversified time-series momentum (trend-following) | 21 CME futures markets | Rejected on this window |
 
-### Troubleshooting first run
-- `Slack API error: not_in_channel` -> invite the bot to the channel.
-- `channel_not_found` -> use the channel **ID** (channel details -> bottom), not `#name`.
-- HTTP 401/403 from Alpaca -> regenerate keys and make sure they are **paper** keys (toggle top-left of the Alpaca dashboard).
+The value here is the *process that produced this table* — the same discipline a quant
+researcher uses to separate real edges from noise.
 
-### Push commands
+---
 
-```
-cd stock-trader-bot
-git init
-git add .
-git commit -m "Phase 0: Alpaca paper client, Slack alerts, heartbeat workflow"
-git branch -M main
-git remote add origin https://github.com/burugupallyprem-coder/<YOUR-RENAMED-REPO>.git
-git push -u origin main --force
-```
-
-(`--force` replaces the old Kalshi contents - intended.)
-
-## Local run
-
-```bash
-pip install -r requirements.txt
-python tests/test_offline.py                     # offline unit tests
-ALPACA_API_KEY_ID=... ALPACA_SECRET_KEY=... python -m src.main --heartbeat
-```
-
-Without Slack secrets set, messages print to stdout.
-
-## Layout
+## Architecture
 
 ```
-src/alpaca_client.py   Alpaca REST client (paper-locked)
-src/slackbot.py        Slack chat.postMessage alerts
-src/main.py            --heartbeat / --status
-config.yaml            Phase 1 will add universe, strategy params, risk caps
-.github/workflows/bot.yml
+GitHub Actions (scheduler)  ->  Strategy / signal layer  ->  No-lookahead backtest engine
+                                                                        |
+Broker (Alpaca paper, code-locked)  <-  Risk engine (sizing, caps)  <---+
+                                                                        |
+Databento (futures data)  ->  Research harness (gate + walk-forward)  ->  Slack alerts + reports
 ```
 
-## Roadmap position (see day-trading-bot-roadmap.md)
+- **Execution / live paper:** Alpaca paper API, server-side bracket orders, hard risk caps
+  (fixed % risk per trade, position caps, forced end-of-day flat, never overnight).
+- **Automation:** fully serverless via GitHub Actions (pre-market briefing, entry session,
+  end-of-day reconciliation, weekly research sweep) with Slack monitoring and a self-rendering
+  dashboard.
+- **Data:** Alpaca (equities) and Databento (CME futures, roll-adjusted continuous series).
+- **Safety:** paper-lock in the broker client; an arming kill-switch wired to research verdicts.
 
-- **Phase 0 - DONE** (heartbeat verified 2026-07-10).
-- **Phase 1 (built)** - backtest harness: `python -m src.backtest.run`, or the `backtest` Actions workflow (manual + Saturdays 14:00 UTC). Downloads 2 years of 5-min bars, runs all three candidate strategies (opening-range breakout, VWAP mean-reversion, momentum continuation) through the no-lookahead simulator with pessimistic costs, writes `reports/backtest_*.md` + per-trade CSVs, posts a [BACKTEST] summary to Slack. GATE (config.yaml): >=100 trades, >=0.05R expectancy, profit factor >=1.15, >=60% quarters positive - only PASSing strategies are eligible for Phase 2 paper deployment.
-- **Phase 2 (built)** - paper execution of the **filtered ORB candidate** (open_bars=3, rr=1.5, cutoff 10:30 ET, min_or_width_frac=0.004, regime_filter=on, rs_topk=5). This config PASSED the hardened gate on 2026-07-18 (train +0.105R and validation +0.082R agree, survives 2c slippage, walk-forward 3/4 folds). It is a BACKTEST edge on a fresh 21-session paper trial (see PRE_REGISTRATION.md) - not proven money, not eligible for real capital. The earlier unfiltered ORB was retired as a no-edge benchmark. `trade` workflow runs the entry session each morning and the EOD flatten at 15:45 ET (DST-safe double crons). Server-side bracket orders; 0.5% risk/trade; max 3 positions; worst-case day structurally ~ -1.5%; never holds overnight. [TRADE] and [EOD] alerts to Slack; daily log committed to data/paper_days.csv.
-- Phase 3 - THE MONTH: 21 sessions, zero human touches, pre-registered success criteria.
-- Phase 4 - verdict: translate measured edge into $/day per capital level, honestly.
+## Tech stack
+Python (pandas, NumPy) · Alpaca & Databento APIs · GitHub Actions (CI + scheduling) ·
+Slack API · YAML-driven configuration · pytest-style offline unit tests.
 
-House rules: win rate is not the metric; expectancy after costs is. Paper P&L on the default $100k account overstates what a small live account would earn - dollars = edge x capital.
+## Repository layout
+- `src/strategies/` — signal generators (ORB, VWAP-reversion, momentum, filters)
+- `src/backtest/` — no-lookahead engine, metrics, research harness, walk-forward, futures + TSMOM
+- `src/live/` — paper execution, risk engine, pre-market, dashboard
+- `tests/` — offline unit tests for the engine, filters, gate, and cost model
+- `reports/` — committed, timestamped research reports (the audit trail)
+- `PRE_REGISTRATION*.md` — pre-declared hypotheses and success criteria
+
+---
+
+*Built as a self-directed study in quantitative research methodology and trading-systems
+engineering. Emphasis throughout: reproducibility, cost realism, and intellectual honesty
+about what does and does not work.*

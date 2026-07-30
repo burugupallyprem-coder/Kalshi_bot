@@ -235,6 +235,10 @@ tsmom:   # diversified trend-following (time-series momentum) - the one evidence
   cost_sensitivity: [0.001, 0.002]
   max_cost_usd: 32.0
   skip_cost_check: false
+  roll: naive            # naive | smooth (diagnostic compares both)
+  min_roll_days: 3
+  cache_path: null       # set to data/tsmom_prices_naive.csv to reuse cached data ($0)
+  force_refetch: false
   gate:
     min_sharpe: 0.5             # modest but real, AFTER costs, OUT-OF-SAMPLE
     min_wf_frac: 0.6
