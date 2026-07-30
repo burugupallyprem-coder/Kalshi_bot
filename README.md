@@ -1,84 +1,69 @@
-# Systematic Trading Research Platform
+# Systematic Trading Research Platform (US Equities)
 
 A from-scratch quantitative research platform for designing, backtesting, and paper-deploying
-intraday and cross-asset systematic strategies — built with an emphasis on **methodological
-rigor over P&L**. The defining feature of this project is not a winning strategy; it is an
-evaluation pipeline disciplined enough to **honestly reject its own ideas** when they fail
-out-of-sample.
+intraday systematic strategies — engineered around one principle: **methodological rigor over
+P&L.** It is built to *disprove its own ideas* before trusting them, and it does: across six
+strategy families, it rejected five with real out-of-sample metrics and deployed only a
+measured benchmark to paper.
 
-> **Research / paper-trading only.** No live capital is traded. The broker client is
-> hard-locked to paper endpoints.
+> **Research / paper-trading only.** No live capital. The broker client is hard-locked to paper endpoints.
+
+**Tools & libraries:** Python (pandas, NumPy) · Alpaca API (equities data + paper execution) ·
+GitHub Actions (CI + serverless scheduling) · Slack API (monitoring) · YAML config · unit tests.
 
 ---
 
-## Why this project is different
+![Out-of-sample scorecard: most strategies correctly rejected against a pre-registered +0.05R gate](docs/results_scorecard.png)
 
-Most retail strategy repos show a single, beautiful, over-fit backtest. This one is built to
-do the opposite — to *catch* over-fitting before it costs money:
+*Every strategy is judged once on untouched out-of-sample data against a pre-registered gate. The platform's value is the discipline to reject its own ideas — five of six here.*
 
-- **Pre-registration.** Parameter grids and success gates are declared *before* each run; no
-  moving the goalposts after seeing results.
-- **Train / validation separation.** Parameters are chosen on a training window and judged
-  **once** on untouched out-of-sample data.
-- **Walk-forward validation.** A strategy must hold up across multiple sequential folds, not a
-  single lucky window.
-- **Realistic costs.** Slippage and (for futures) tick-spread + commission are charged against
-  every trade; a "WEAK PASS" label flags edges that only survive on zero-cost assumptions.
-- **No-lookahead engine.** Signals never see the bar they trade on; stops are checked before
-  targets; gaps fill on the unfavorable side.
-- **Bootstrap significance + regime breakdowns** on any candidate that clears the gate.
+## Results at a glance (real, out-of-sample, after modeled costs)
 
-## The honest scorecard
+Every strategy below ran through the **same pre-registered gate** (net expectancy in R, profit
+factor, walk-forward folds, cost sensitivity), judged **once** on an untouched validation window:
 
-Every strategy below was run through the *same* pre-registered gate (net expectancy, profit
-factor, walk-forward, cost sensitivity). The results are reported as they came:
-
-| Strategy | Asset class | Verdict |
+| Strategy | Out-of-sample result | Verdict |
 |---|---|---|
-| Opening-Range Breakout (filtered: regime + relative-strength) | US equities (intraday) | Deployed to paper as a measured benchmark |
-| VWAP mean-reversion | US equities | Rejected — no out-of-sample edge |
-| Momentum continuation | US equities | Rejected |
-| 3-step break-and-retest scalp | US equities (1-min) | Weak pass; flagged fragile |
-| Momentum on index futures | MES/MNQ/MYM (real Databento data) | Rejected — edge did not survive real costs |
-| Diversified time-series momentum (trend-following) | 21 CME futures markets | Rejected on this window |
+| Filtered Opening-Range Breakout (regime + relative-strength) | ~150 val trades, **+0.082R**, PF **1.289**, walk-forward **3/4** folds | Deployed to paper as a measured benchmark (flagged unconfirmed) |
+| VWAP mean-reversion | 1,948 val trades, **−0.094R**, PF 0.853, 0/3 quarters+ | Rejected |
+| Momentum continuation | 604 val trades, **+0.006R**, PF 1.136 (below gate) | Rejected |
+| 3-step break-and-retest scalp (1-min) | 2,070 val trades, **+0.098R**, PF 1.172; bootstrap 90% CI **[+0.042, +0.153]** | Weak pass — flagged fragile |
+| Momentum on **real index futures** (MES/MNQ/MYM, Databento) | 314 trades, **−0.069R**, PF 0.938, 1/4 folds | Rejected — edge did not survive real costs |
+| Diversified time-series momentum (21 CME markets) | OOS Sharpe **−0.27**, −4.4%/yr, maxDD −49.6% | Rejected on this window |
 
-The value here is the *process that produced this table* — the same discipline a quant
-researcher uses to separate real edges from noise.
+**The measurable impact:** the pipeline caught a strategy that looked strong on an equity proxy
+(**+0.263R** in-sample) and proved it was a **money-loser on real futures data with real costs**
+— i.e., it prevented deploying a losing strategy *before* a data-feed subscription or live risk.
+That "don't-fool-yourself" catch is the entire point.
 
----
+## What I built, how, and what happened
+- **Engineered a no-lookahead, event-driven backtest engine** (pandas/NumPy): signals never see
+  the bar they trade on; stops checked before targets; gaps fill on the unfavorable side;
+  fixed-fractional risk sizing. Validated with offline unit tests.
+- **Built a pre-registered research harness** with train/validation separation, multi-fold
+  walk-forward, bootstrap significance testing, per-regime breakdowns, and cost-sensitivity
+  sweeps — the guardrails that separate real edges from over-fit noise.
+- **Integrated real market data** from Alpaca (equities) and Databento (CME futures, roll-adjusted
+  continuous series), with a pre-flight cost estimator that caps spend before any download.
+- **Automated the full pipeline serverlessly** on GitHub Actions: pre-market briefing, entry
+  session, end-of-day reconciliation, and weekly research sweeps — with Slack monitoring, a
+  self-rendering dashboard, server-side bracket orders, hard risk caps, and a paper-lock plus an
+  arming kill-switch wired to research verdicts.
 
 ## Architecture
-
 ```
-GitHub Actions (scheduler)  ->  Strategy / signal layer  ->  No-lookahead backtest engine
-                                                                        |
-Broker (Alpaca paper, code-locked)  <-  Risk engine (sizing, caps)  <---+
-                                                                        |
-Databento (futures data)  ->  Research harness (gate + walk-forward)  ->  Slack alerts + reports
+GitHub Actions (scheduler) -> Signal layer -> No-lookahead backtest engine -> Risk engine
+        |                                                                          |
+   Slack alerts + dashboard  <-  Alpaca paper (code-locked) / Databento data  <----+
 ```
-
-- **Execution / live paper:** Alpaca paper API, server-side bracket orders, hard risk caps
-  (fixed % risk per trade, position caps, forced end-of-day flat, never overnight).
-- **Automation:** fully serverless via GitHub Actions (pre-market briefing, entry session,
-  end-of-day reconciliation, weekly research sweep) with Slack monitoring and a self-rendering
-  dashboard.
-- **Data:** Alpaca (equities) and Databento (CME futures, roll-adjusted continuous series).
-- **Safety:** paper-lock in the broker client; an arming kill-switch wired to research verdicts.
-
-## Tech stack
-Python (pandas, NumPy) · Alpaca & Databento APIs · GitHub Actions (CI + scheduling) ·
-Slack API · YAML-driven configuration · pytest-style offline unit tests.
 
 ## Repository layout
 - `src/strategies/` — signal generators (ORB, VWAP-reversion, momentum, filters)
-- `src/backtest/` — no-lookahead engine, metrics, research harness, walk-forward, futures + TSMOM
+- `src/backtest/` — engine, metrics, research harness, walk-forward, futures + TSMOM
 - `src/live/` — paper execution, risk engine, pre-market, dashboard
-- `tests/` — offline unit tests for the engine, filters, gate, and cost model
-- `reports/` — committed, timestamped research reports (the audit trail)
-- `PRE_REGISTRATION*.md` — pre-declared hypotheses and success criteria
+- `tests/` — offline unit tests (engine, filters, gate, cost model)
+- `reports/` — timestamped research reports (the full audit trail)
 
 ---
-
-*Built as a self-directed study in quantitative research methodology and trading-systems
-engineering. Emphasis throughout: reproducibility, cost realism, and intellectual honesty
-about what does and does not work.*
+*A self-directed study in quantitative research methodology and trading-systems engineering:
+reproducibility, cost realism, and intellectual honesty about what does and does not work.*
