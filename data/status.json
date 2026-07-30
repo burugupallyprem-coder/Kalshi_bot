@@ -1,12 +1,6 @@
 {
  "runs": [
   {
-   "wf": "reconcile",
-   "utc": "2026-07-20 23:10",
-   "ok": true,
-   "outcome": "success"
-  },
-  {
    "wf": "premarket",
    "utc": "2026-07-21 12:30",
    "ok": true,
@@ -597,6 +591,12 @@
   {
    "wf": "trade-eod",
    "utc": "2026-07-30 20:05",
+   "ok": true,
+   "outcome": "success"
+  },
+  {
+   "wf": "trade-eod",
+   "utc": "2026-07-30 20:23",
    "ok": true,
    "outcome": "success"
   }
