@@ -219,3 +219,24 @@ futures_stage2:   # Stage 2: LOCKED momentum on REAL futures (Databento). RESEAR
     hold_above: 3
     time_stop_bars: 24
     max_risk_frac: 0.015
+
+tsmom:   # diversified trend-following (time-series momentum) - the one evidence-backed futures approach. RESEARCH ONLY.
+  universe: [ES, NQ, YM, RTY, ZN, ZB, ZF, ZT, 6E, 6J, 6B, 6A, 6C, GC, SI, HG, CL, NG, ZC, ZS, ZW]
+  databento:
+    dataset: "GLBX.MDP3"
+    continuous_suffix: ".v.0"   # volume roll (follows liquidity)
+  start: "2010-01-01"
+  end: null
+  oos_start: "2019-01-01"       # pick lookback on <2019, judge ONCE on >=2019
+  lookbacks: [63, 126, 252]     # 3 / 6 / 12-month trailing-return sign
+  vol_window: 60
+  target_vol: 0.10              # 10% annualized per-market vol target
+  cost_per_turnover: 0.0005     # realistic futures cost in return/vol space
+  cost_sensitivity: [0.001, 0.002]
+  max_cost_usd: 5.0
+  skip_cost_check: false
+  gate:
+    min_sharpe: 0.5             # modest but real, AFTER costs, OUT-OF-SAMPLE
+    min_wf_frac: 0.6
+    wf_folds: 4
+    max_drawdown: 0.5
