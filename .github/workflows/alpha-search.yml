@@ -1,0 +1,42 @@
+name: alpha-search
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 14 * * 0"   # weekly, Sundays 14:17 UTC
+permissions:
+  contents: write
+concurrency:
+  group: reports-commit
+  cancel-in-progress: false
+jobs:
+  alpha-search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Integrity check
+        run: python -m compileall -q src tests
+      - name: Unit tests
+        run: |
+          python tests/test_multiple_testing.py
+          python tests/test_alpha_search.py
+      - name: Run alpha-search cycle
+        env:
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+        run: python -m src.backtest.alpha_search
+      - name: Commit reports + quarantine
+        run: |
+          git config user.name "stock-trader-bot"; git config user.email "bot@users.noreply.github.com"
+          for i in 1 2 3; do
+            git fetch origin main; git reset --soft origin/main; git add reports/ data/
+            if git diff --cached --quiet; then echo nothing; break; fi
+            git commit -m "alpha-search cycle $(date -u +%Y%m%dT%H%M%SZ)"
+            if git push origin HEAD:main; then break; fi; sleep $((RANDOM%10+5)); done

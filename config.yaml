@@ -244,3 +244,14 @@ tsmom:   # diversified trend-following (time-series momentum) - the one evidence
     min_wf_frac: 0.6
     wf_folds: 4
     max_drawdown: 0.5
+
+alpha_search:   # continuous, MULTIPLE-TESTING-controlled alpha search (minimal starter). RESEARCH ONLY.
+  universe: [SPY, QQQ, AAPL, MSFT, NVDA, AMZN, META, GOOGL, TSLA, AMD]
+  dsr_threshold: 0.95      # a survivor must clear 95% Deflated-Sharpe confidence (corrects for #tests)
+  min_trades: 30
+  hypotheses:              # small pre-declared set - widen later once the machinery is trusted
+    - {name: "ORB long 3bar rr1.5", strategy: orb, params: {side: long, open_bars: 3, rr: 1.5, cutoff_et: "10:30", vol_confirm: false}}
+    - {name: "ORB long 3bar rr2.0", strategy: orb, params: {side: long, open_bars: 3, rr: 2.0, cutoff_et: "10:30", vol_confirm: false}}
+    - {name: "ORB long 6bar rr2.0", strategy: orb, params: {side: long, open_bars: 6, rr: 2.0, cutoff_et: "10:30", vol_confirm: false}}
+    - {name: "VWAP-revert z1.5",     strategy: vwap_revert, params: {side: long, z_entry: 1.5, stop_sigmas: 1.0}}
+    - {name: "Momentum long rr2.0",  strategy: momentum, params: {side: long, rr: 2.0, stop_lookback: 6}}
