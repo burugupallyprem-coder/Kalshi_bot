@@ -246,20 +246,20 @@ tsmom:   # diversified trend-following (time-series momentum) - the one evidence
     max_drawdown: 0.5
 
 alpha_search:   # continuous, MULTIPLE-TESTING + FORWARD-TESTED alpha search. RESEARCH ONLY.
-  universe: [SPY, QQQ, AAPL, MSFT, NVDA, AMZN, META, GOOGL, TSLA, AMD]
-  search_start: "2023-01-01"    # window used to score hypotheses + deflated-Sharpe
+  universe: [SPY, QQQ, AAPL, MSFT, NVDA, AMZN, TSLA, AMD]   # 8 liquid names (tractable + enough trades)
+  search_start: "2024-01-01"    # ~1.5y search window (keeps a run to minutes, not an hour)
   search_end: "2025-06-30"
   forward_start: "2025-07-01"   # fresh held-out window - survivors must ALSO pass here
   forward_end: null
-  dsr_threshold: 0.95           # survivor must clear 95% Deflated-Sharpe (corrects for #tests)
+  dsr_threshold: 0.95
   min_trades: 30
   forward_min_trades: 20
-  search_space:                 # pre-declared grids -> expanded to a whole batch every run
+  search_space:                 # ~40 pre-declared hypotheses per run (widen once timing is confirmed)
     orb:
       side: [long, short]
-      open_bars: [3, 6]
+      open_bars: [3]
       rr: [1.5, 2.0, 3.0]
-      cutoff_et: ["10:30", "11:30"]
+      cutoff_et: ["10:30"]
       vol_confirm: [false, true]
     vwap_revert:
       side: [long, short]

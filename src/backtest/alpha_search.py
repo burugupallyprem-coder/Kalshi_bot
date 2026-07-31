@@ -95,7 +95,7 @@ def run():
     a = cfg["alpha_search"]
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     cfg["universe"] = a["universe"]
-    fwd_end = a.get("forward_end") or (pd.Timestamp.utcnow() - pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+    fwd_end = a.get("forward_end") or (pd.Timestamp.now("UTC") - pd.Timedelta(days=1)).strftime("%Y-%m-%d")
 
     bars = data_mod.fetch_bars(a["universe"], a["search_start"], fwd_end,
                                timeframe=cfg["backtest"]["timeframe"], feed=cfg["backtest"]["feed"])
