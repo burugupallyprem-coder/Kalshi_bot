@@ -68,7 +68,17 @@ def build_context(groups, cfg):
         spy_er[date] = filters.early_return(sday, ob)
     rs = {date: {s: er - spy_er.get(date, 0.0) for s, er in syms.items()}
           for date, syms in early.items()}
-    return {"spy_long_ok": spy_long, "rs": rs}
+    prev_close = {}
+    by_sym = {}
+    for symbol, day in groups:
+        by_sym.setdefault(symbol, []).append(day)
+    for symbol, days in by_sym.items():
+        pc = None
+        for d in sorted(days, key=lambda x: x["date"].iloc[0]):
+            dt = d["date"].iloc[0]
+            prev_close.setdefault(symbol, {})[dt] = pc
+            pc = float(d["close"].iloc[-1])
+    return {"spy_long_ok": spy_long, "rs": rs, "prev_close": prev_close}
 
 
 def walk_forward_folds(dates, n_folds):
@@ -114,7 +124,8 @@ def run_config(groups, strat_mod, params, cfg, name, context=None):
                 allowed = filters.top_k_symbols(context["rs"].get(date, {}), rs_topk)
                 if symbol not in allowed:
                     continue
-            ctx = {"spy_long_ok": context["spy_long_ok"].get(date, False)}
+            ctx = {"spy_long_ok": context["spy_long_ok"].get(date, False),
+                   "prev_close": context.get("prev_close", {}).get(symbol, {}).get(date)}
         signals = strat_mod.generate(day, params, ctx)
         if signals:
             trades.extend(engine.simulate_day(day, signals, cfg, name))

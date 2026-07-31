@@ -278,3 +278,8 @@ alpha_search:   # continuous, MULTIPLE-TESTING + FORWARD-TESTED alpha search. RE
       side: [long, short]
       move_frac: [0.004, 0.008]
       rr: [1.0, 1.5]
+    gap:
+      mode: [fade, go]
+      min_gap: [0.003, 0.006]
+      rr: [1.0, 1.5]
+      stop_frac: [0.004]
