@@ -7,18 +7,25 @@ jobs:
   search:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
       - run: pip install -r requirements.txt
-      - env:
+      - name: Run overnight search
+        env:
           ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
         run: python -m src.backtest.overnight_search
-      - uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "overnight-search cycle report"
-          file_pattern: "reports/*.md data/quarantine_overnight.json"
+      - name: Commit reports + quarantine
+        run: |
+          git config user.name "stock-trader-bot"; git config user.email "bot@users.noreply.github.com"
+          for i in 1 2 3; do
+            git fetch origin main; git reset --soft origin/main; git add reports/ data/
+            if git diff --cached --quiet; then echo nothing; break; fi
+            git commit -m "overnight-search cycle $(date -u +%Y%m%dT%H%M%SZ)"
+            if git push origin HEAD:main; then break; fi; sleep $((RANDOM%10+5)); done
