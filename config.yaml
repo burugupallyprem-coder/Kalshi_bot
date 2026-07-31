@@ -270,3 +270,11 @@ alpha_search:   # continuous, MULTIPLE-TESTING + FORWARD-TESTED alpha search. RE
       rr: [2.0, 3.0]
       stop_lookback: [6, 12]
       hold_above: [3, 6]
+    or_fade:
+      side: [long, short]
+      ext_frac: [0.002, 0.004]
+      rr: [1.0, 1.5]
+    intraday_reversal:
+      side: [long, short]
+      move_frac: [0.004, 0.008]
+      rr: [1.0, 1.5]

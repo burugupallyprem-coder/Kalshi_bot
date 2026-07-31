@@ -89,8 +89,9 @@ def run():
     import pandas as pd
     from src import data as data_mod, slackbot
     from src.backtest import research, metrics
-    from src.strategies import momentum, orb, vwap_revert
-    mods = {"orb": orb, "vwap_revert": vwap_revert, "momentum": momentum}
+    from src.strategies import momentum, orb, vwap_revert, or_fade, intraday_reversal
+    mods = {"orb": orb, "vwap_revert": vwap_revert, "momentum": momentum,
+            "or_fade": or_fade, "intraday_reversal": intraday_reversal}
     cfg = research.load_config()
     a = cfg["alpha_search"]
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
