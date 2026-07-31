@@ -79,6 +79,19 @@ def test_spy_regime_up_flags_dates_above_sma():
     assert up.get(pd.Timestamp("2024-01-05").date()) is True, up
 
 
+
+def test_cost_sensitivity_monotone_and_counts():
+    rows = [("2024-01-02", 100, 100), ("2024-01-03", 101, 101),
+            ("2024-01-04", 102, 102), ("2024-01-05", 103, 103)]
+    frames = {"AAA": _frame("AAA", rows)}
+    v = {"side": "long", "cond": "always"}
+    out = ON.cost_sensitivity(frames, v, CFG, pd.Timestamp("2024-01-01").date(),
+                              pd.Timestamp("2024-12-31").date(), {}, bps_levels=(0, 2, 5))
+    assert [r["bps"] for r in out] == [0, 2, 5], out
+    assert all(r["nights"] == 2 for r in out), out          # same nights regardless of cost
+    assert out[0]["mean_bps"] > out[1]["mean_bps"] > out[2]["mean_bps"], out  # higher cost -> lower
+
+
 if __name__ == "__main__":
     import traceback
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]

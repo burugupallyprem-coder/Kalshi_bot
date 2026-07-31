@@ -95,6 +95,21 @@ def overnight_returns(frames, variant, cfg, start, end, spy_up):
     return rets
 
 
+def cost_sensitivity(frames, variant, cfg, start, end, spy_up, bps_levels=(0, 2, 5)):
+    """Best-variant sanity: nights + per-night mean(bps) + per-night Sharpe at several
+    cost levels. Shown transparently in the report - NOT used to cherry-pick a winner."""
+    import copy
+    rows = []
+    for bps in bps_levels:
+        c = copy.deepcopy(cfg); c["overnight_search"]["cost_bps"] = bps
+        r = overnight_returns(frames, variant, c, start, end, spy_up)
+        sr, n, _, _ = MT.per_trade_sharpe(r)
+        mean_bps = (sum(r) / len(r) * 10000.0) if r else 0.0
+        rows.append({"bps": bps, "nights": n, "mean_bps": round(mean_bps, 3),
+                     "sharpe": round(sr, 4)})
+    return rows
+
+
 def _quarantine(name, variant, search, forward):
     q = ROOT / "data" / "quarantine_overnight.json"
     q.parent.mkdir(exist_ok=True)
@@ -162,6 +177,12 @@ def run():
     L += ["", "## All variants by search Sharpe"]
     for s in sorted(res["all"], key=lambda x: x["sharpe"], reverse=True):
         L.append(f"- {s['name']}: {s['sharpe']} ({s['trades']} nights)")
+    if res["best"]:
+        bv = next(x for x in variants if x["name"] == res["best"]["name"])
+        L += ["", "## Cost sensitivity of the best variant (transparency - not used to pick)",
+              "cost_bps | nights | mean_bps/night | per-night Sharpe"]
+        for row in cost_sensitivity(frames, bv, cfg, s_start, s_end, spy_up):
+            L.append(f"{row['bps']:>7} | {row['nights']:>6} | {row['mean_bps']:>13} | {row['sharpe']}")
     (out / f"overnight_search_{stamp}.md").write_text("\n".join(L), encoding="utf-8")
 
     if res["survivor"] and fwd and fwd["confirmed"]:
@@ -176,10 +197,13 @@ def run():
             f"[OVERNIGHT] {ts} - a variant passed the deflated-Sharpe bar but FAILED the forward "
             f"test. Correctly discarded. {res['n_trials']} tested.\nDetail: reports/overnight_search_{stamp}.md")
     else:
+        b = res["best"] or {}
+        tag = "DATA/PLUMBING (<2 nights)" if b.get("trades", 0) < 2 else "real nights, edge <= luck bar"
         slackbot.post(
             f"[OVERNIGHT] {ts} - {res['n_trials']} variants tested, no edge "
-            f"(best DSR {res['dsr']} < {res['threshold']}). Still searching.\n"
-            f"Detail: reports/overnight_search_{stamp}.md")
+            f"(best DSR {res['dsr']} < {res['threshold']}). "
+            f"Best '{b.get('name','-')}': raw Sharpe {b.get('sharpe',0)} over {b.get('trades',0)} nights [{tag}]. "
+            f"Still searching.\nDetail: reports/overnight_search_{stamp}.md")
 
 
 if __name__ == "__main__":
