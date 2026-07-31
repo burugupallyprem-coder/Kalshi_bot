@@ -283,3 +283,18 @@ alpha_search:   # continuous, MULTIPLE-TESTING + FORWARD-TESTED alpha search. RE
       min_gap: [0.003, 0.006]
       rr: [1.0, 1.5]
       stop_frac: [0.004]
+
+overnight_search:
+  universe: [SPY, QQQ, AAPL, MSFT, NVDA, AMZN, TSLA, AMD, GOOGL, META, JPM, XLF, IWM, DIA, XLE]
+  search_start: "2021-01-01"
+  search_end: "2025-06-30"
+  forward_start: "2025-07-01"
+  forward_end: null
+  dsr_threshold: 0.95
+  min_trades: 60
+  forward_min_trades: 30
+  cost_bps: 5
+  regime_sma: 50
+  grid:
+    side: [long, short]
+    cond: [always, after_down, after_up, spy_up]
