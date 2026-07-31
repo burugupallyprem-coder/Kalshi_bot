@@ -245,13 +245,28 @@ tsmom:   # diversified trend-following (time-series momentum) - the one evidence
     wf_folds: 4
     max_drawdown: 0.5
 
-alpha_search:   # continuous, MULTIPLE-TESTING-controlled alpha search (minimal starter). RESEARCH ONLY.
+alpha_search:   # continuous, MULTIPLE-TESTING + FORWARD-TESTED alpha search. RESEARCH ONLY.
   universe: [SPY, QQQ, AAPL, MSFT, NVDA, AMZN, META, GOOGL, TSLA, AMD]
-  dsr_threshold: 0.95      # a survivor must clear 95% Deflated-Sharpe confidence (corrects for #tests)
+  search_start: "2023-01-01"    # window used to score hypotheses + deflated-Sharpe
+  search_end: "2025-06-30"
+  forward_start: "2025-07-01"   # fresh held-out window - survivors must ALSO pass here
+  forward_end: null
+  dsr_threshold: 0.95           # survivor must clear 95% Deflated-Sharpe (corrects for #tests)
   min_trades: 30
-  hypotheses:              # small pre-declared set - widen later once the machinery is trusted
-    - {name: "ORB long 3bar rr1.5", strategy: orb, params: {side: long, open_bars: 3, rr: 1.5, cutoff_et: "10:30", vol_confirm: false}}
-    - {name: "ORB long 3bar rr2.0", strategy: orb, params: {side: long, open_bars: 3, rr: 2.0, cutoff_et: "10:30", vol_confirm: false}}
-    - {name: "ORB long 6bar rr2.0", strategy: orb, params: {side: long, open_bars: 6, rr: 2.0, cutoff_et: "10:30", vol_confirm: false}}
-    - {name: "VWAP-revert z1.5",     strategy: vwap_revert, params: {side: long, z_entry: 1.5, stop_sigmas: 1.0}}
-    - {name: "Momentum long rr2.0",  strategy: momentum, params: {side: long, rr: 2.0, stop_lookback: 6}}
+  forward_min_trades: 20
+  search_space:                 # pre-declared grids -> expanded to a whole batch every run
+    orb:
+      side: [long, short]
+      open_bars: [3, 6]
+      rr: [1.5, 2.0, 3.0]
+      cutoff_et: ["10:30", "11:30"]
+      vol_confirm: [false, true]
+    vwap_revert:
+      side: [long, short]
+      z_entry: [1.5, 2.0, 2.5]
+      stop_sigmas: [1.0, 1.5]
+    momentum:
+      side: [long, short]
+      rr: [2.0, 3.0]
+      stop_lookback: [6, 12]
+      hold_above: [3, 6]
