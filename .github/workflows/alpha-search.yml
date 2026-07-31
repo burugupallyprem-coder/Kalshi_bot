@@ -1,8 +1,6 @@
 name: alpha-search
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "17 14 * * 0"   # weekly, Sundays 14:17 UTC
 permissions:
   contents: write
 concurrency:

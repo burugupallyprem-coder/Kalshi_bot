@@ -1,8 +1,6 @@
 name: overnight-search
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "37 14 * * 0"   # Sundays, after the intraday alpha-search
 jobs:
   search:
     runs-on: ubuntu-latest
