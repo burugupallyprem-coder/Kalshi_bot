@@ -298,3 +298,30 @@ overnight_search:
   grid:
     side: [long, short]
     cond: [always, after_down, after_up, spy_up]
+
+indicator_search:
+  universe: [SPY, QQQ, AAPL, MSFT, NVDA, AMZN, TSLA, AMD, GOOGL, META, JPM, IWM, DIA]
+  search_start: "2021-01-01"
+  search_end: "2025-06-30"
+  forward_start: "2025-07-01"
+  forward_end: null
+  dsr_threshold: 0.95
+  min_trades: 60
+  forward_min_trades: 30
+  cost_bps: 5
+  grid:
+    bollinger:
+      mode: [revert, breakout]
+      period: [20]
+      k: [2.0, 2.5]
+    rsi:
+      period: [10, 14]
+      low: [30]
+      high: [70]
+    macd:
+      fast: [12]
+      slow: [26]
+      signal: [9]
+    fib:
+      lookback: [20]
+      retr: [0.5, 0.618]
