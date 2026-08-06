@@ -2,18 +2,6 @@
  "runs": [
   {
    "wf": "trade-eod",
-   "utc": "2026-07-27 20:40",
-   "ok": true,
-   "outcome": "success"
-  },
-  {
-   "wf": "trade-eod",
-   "utc": "2026-07-27 20:44",
-   "ok": true,
-   "outcome": "success"
-  },
-  {
-   "wf": "trade-eod",
    "utc": "2026-07-27 20:51",
    "ok": true,
    "outcome": "success"
@@ -591,6 +579,18 @@
   {
    "wf": "trade-eod",
    "utc": "2026-08-05 21:32",
+   "ok": true,
+   "outcome": "success"
+  },
+  {
+   "wf": "premarket",
+   "utc": "2026-08-06 11:52",
+   "ok": true,
+   "outcome": "success"
+  },
+  {
+   "wf": "premarket",
+   "utc": "2026-08-06 12:31",
    "ok": true,
    "outcome": "success"
   },
