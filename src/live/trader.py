@@ -255,6 +255,37 @@ def run_entry_session(cfg, client=None, sleep_fn=time_mod.sleep):
           f"| regime_filter={regime_filter} rs_topk={rs_topk} "
           f"min_or_width_frac={params.get('min_or_width_frac')}")
 
+    # SAFETY - a day-trading bot must START FLAT. If any position/order survived from a
+    # prior session (a FAILED EOD flatten), it carried overnight UNPROTECTED (bracket legs
+    # expire at the close). Cancel + close it LOUDLY before trading - never trade on top of
+    # a stale carry, never let it linger into a new day. This is the belt-and-suspenders
+    # that neutralises an unreliable EOD flatten.
+    try:
+        stale_pos = client.positions()
+        stale_ord = client.open_orders()
+        if stale_pos or stale_ord:
+            names = ", ".join(f"{q.get('symbol','?')}x{q.get('qty','?')}" for q in stale_pos) or "orders-only"
+            print(f"[entry-session][WARN] stale carry at open - flattening first: {names}")
+            client.cancel_all_orders()
+            _poll_until(lambda: len(client.open_orders()) == 0, tries=8, sleep_fn=sleep_fn)
+            if stale_pos:
+                client.close_all_positions()
+                _poll_until(lambda: len(client.positions()) == 0, tries=12, sleep_fn=sleep_fn)
+            still = client.positions()
+            d = now_et().strftime("%Y-%m-%d")
+            if still:
+                sn = ", ".join(f"{q.get('symbol','?')}x{q.get('qty','?')}" for q in still)
+                slackbot.post(f"[ENTRY][WARNING] {d} - STALE positions from a failed prior flatten could NOT "
+                              f"be closed at open: {sn}. They ran UNPROTECTED overnight. Close them manually "
+                              f"in Alpaca NOW, then investigate EOD reliability.")
+            elif stale_pos:
+                slackbot.post(f"[ENTRY] {d} - cleaned up {len(stale_pos)} STALE position(s) + "
+                              f"{len(stale_ord)} order(s) ({names}) carried from a FAILED prior EOD flatten. "
+                              f"They were UNPROTECTED overnight (gap risk); the flat-by-close rule was "
+                              f"violated. Started flat. Investigate the EOD cron.")
+    except Exception as e:
+        print(f"[entry-session] stale-carry cleanup failed: {e}")
+
     while now_et().time() < cutoff:
         try:
             polls += 1
